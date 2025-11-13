@@ -22,7 +22,8 @@ async def get_data():
 @ui.page('/')
 def main_page():
     ui.label('Web Application').classes('text-h3')
-    ui.button('Click me', on_click=lambda: ui.notify('Button clicked!'))
+    ui.label(f'Log Level: {app_config.get("APP_LOG_LEVEL")}').classes('text-h5')
+    ui.button('Click me', on_click=lambda: ui.notify('Button clicked! Action performed.'))
     
 @ui.page('/dashboard')
 def dashboard():
