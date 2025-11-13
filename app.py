@@ -23,7 +23,7 @@ user_session = {}
 is_first_run = True  # Set to False after initialization
 
 APP_TITLE = "Smart System Operator"
-APP_LOGO_PATH = './assets/img/application-logo.png'
+APP_LOGO_PATH = '/assets/img/application-logo.png'
 
 def init_data():
     """Initialize application data on first run"""
