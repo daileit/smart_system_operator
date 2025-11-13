@@ -64,3 +64,8 @@ jobs:
         echo "\`\`\`bash" >> $GITHUB_STEP_SUMMARY
         echo "docker run -p 8080:8080 ${{ env.IMAGE_NAME }}:latest" >> $GITHUB_STEP_SUMMARY
         echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+        
+    - name: Call deploy webhook
+      if: github.event_name != 'pull_request' && secrets.DEPLOY_HOOK_URL != ''
+      run: |
+        curl -X GET "${{ secrets.DEPLOY_HOOK_URL }}?repo=${{ secrets.DOCKERHUB_USERNAME }}&name=smart-system-operator&tag=${{ steps.meta.outputs.version }}"
