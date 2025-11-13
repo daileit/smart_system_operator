@@ -2,11 +2,13 @@ import redis
 import json
 import os
 import jsonlog
+import config as env_config
 
 logger = jsonlog.setup_logger("cache")
 
-redisHost=os.getenv("REDIS_HOST")
-redisPassword=os.getenv("REDIS_PASSWORD")
+redis_config = env_config.Config(group="REDIS")
+redisHost = redis_config.get("REDIS_HOST")
+redisPassword = redis_config.get("REDIS_PASSWORD")
 
 init_default_data = [
     {'role': 'system', 'content': 'Initialize the system with default data'},

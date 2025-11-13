@@ -5,34 +5,19 @@ import jsonlog
 from contextlib import contextmanager
 import time
 import os
-
-MYSQL_HOST = os.getenv("MYSQL_HOST", "localhost")
-MYSQL_USER = os.getenv("MYSQL_USER", "task_user")
-MYSQL_PASSWORD = os.getenv("MYSQL_PASSWORD", "")
-MYSQL_DATABASE = os.getenv("MYSQL_DATABASE", "database")
-
-default_config = {
-    "host": MYSQL_HOST,
-    "user": MYSQL_USER,
-    "password": MYSQL_PASSWORD,
-    "database": MYSQL_DATABASE,
-    "port": 3306
-}
+import config as env_config
 
 logger = jsonlog.setup_logger("database")
 
-def get_mysql_config(database: Optional[str] = None, **kwargs) -> Dict[str, Any]:
-    config = {
-        "host": MYSQL_HOST,
-        "user": MYSQL_USER,
-        "password": MYSQL_PASSWORD,
-        "database": MYSQL_DATABASE if database is None else database,
-        "port": 3306
-    }
-    
-    # Apply any custom overrides
-    config.update(kwargs)    
-    return config
+mysql_config = env_config.Config(group="MYSQL")
+
+default_config = {
+    "host": mysql_config.get("MYSQL_HOST"),
+    "user": mysql_config.get("MYSQL_USER"),
+    "password": mysql_config.get("MYSQL_PASSWORD"),
+    "database": mysql_config.get("MYSQL_DATABASE"),
+    "port": 3306
+}
 
 class MySQLClient:
     def __init__(self, config: Dict[str, Any] = default_config, use_pool: bool = False, pool_size: int = 5, max_retries: int = 3, database: Optional[str] = None):

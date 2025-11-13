@@ -1,7 +1,9 @@
 from fastapi import FastAPI
 from nicegui import ui
+import jsonlog
 import uvicorn
 
+logger = jsonlog.setup_logger("app")
 app = FastAPI()
 
 # FastAPI routes
