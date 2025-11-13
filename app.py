@@ -2,6 +2,9 @@ from fastapi import FastAPI
 from nicegui import ui
 import jsonlog
 import uvicorn
+import config as env_config
+
+app_config = env_config.Config(group="APP")
 
 logger = jsonlog.setup_logger("app")
 app = FastAPI()
@@ -35,4 +38,4 @@ ui.run_with(
 )
 
 if __name__ == '__main__':
-    uvicorn.run(app, host='0.0.0.0', port=8000)
+    uvicorn.run(app, host='0.0.0.0', port=int(app_config.get("APP_PORT")))

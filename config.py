@@ -31,6 +31,7 @@ class Config:
         self._configs['APP_ENV'] = os.getenv('APP_ENV', 'development')
         self._configs['APP_DEBUG'] = os.getenv('APP_DEBUG', 'false')
         self._configs['APP_LOG_LEVEL'] = os.getenv('APP_LOG_LEVEL', 'INFO')
+        self._configs['APP_PORT'] = os.getenv('APP_PORT', '8080')
     
     def _load_env_variables(self):
         """Load all environment variables into the config (override predefined if set)."""
