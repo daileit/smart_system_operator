@@ -1,4 +1,5 @@
 from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
 from nicegui import ui
 import jsonlog
 import uvicorn
@@ -8,6 +9,9 @@ app_config = env_config.Config(group="APP")
 
 logger = jsonlog.setup_logger("app")
 app = FastAPI()
+
+# Mount static files
+app.mount("/assets", StaticFiles(directory="assets"), name="assets")
 
 # FastAPI routes
 @app.get("/api/health")
