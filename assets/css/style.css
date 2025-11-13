@@ -1,0 +1,9 @@
+.q-table td, .q-table th { 
+    vertical-align: top; 
+}
+
+.q-table .wrap-cell, .q-table td, .q-table th {
+    white-space: pre-wrap;
+    word-break: break-word;
+    overflow-wrap: anywhere;
+}
