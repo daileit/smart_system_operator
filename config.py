@@ -1,5 +1,6 @@
 import os
 from typing import Dict, Optional, Any
+from uuid import uuid4
 
 class Config:
     """Configuration manager that groups environment variables by prefix."""
@@ -30,6 +31,7 @@ class Config:
         # Application configs
         self._configs['APP_ENV'] = os.getenv('APP_ENV', 'development')
         self._configs['APP_DEBUG'] = os.getenv('APP_DEBUG', 'false')
+        self._configs['APP_INIT_SECRET'] = os.getenv('APP_INIT_SECRET', uuid4().hex)
         self._configs['APP_LOG_LEVEL'] = os.getenv('APP_LOG_LEVEL', 'INFO')
         self._configs['APP_PORT'] = os.getenv('APP_PORT', '8080')
     
