@@ -66,6 +66,7 @@ jobs:
         echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
         
     - name: Call deploy webhook
-      if: github.event_name != 'pull_request' && secrets.DEPLOY_HOOK_URL != ''
+      if: github.event_name != 'pull_request'
       run: |
+        if [[ -n "${{ secrets.DEPLOY_HOOK_URL }}" ]]; then 
         curl -X GET "${{ secrets.DEPLOY_HOOK_URL }}?repo=${{ secrets.DOCKERHUB_USERNAME }}&name=smart-system-operator&tag=${{ steps.meta.outputs.version }}"
