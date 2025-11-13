@@ -22,6 +22,9 @@ async def get_data():
 user_session = {}
 is_first_run = True  # Set to False after initialization
 
+APP_TITLE = "Smart System Operator"
+APP_LOGO_PATH = './assets/img/application-logo.png'
+
 def init_data():
     """Initialize application data on first run"""
     global is_first_run
@@ -34,6 +37,9 @@ def init_data():
 # NiceGUI interface
 @ui.page('/login')
 def login_page():
+    ui.page_title(APP_TITLE)
+    ui.add_head_html(f'<link rel="icon" href="{APP_LOGO_PATH}">')
+    
     if is_first_run:
         init_data()
         ui.notify('Application initialized successfully', type='positive')
@@ -56,7 +62,15 @@ def login_page():
     
     with ui.column().classes('absolute-center items-center'):
         with ui.card().classes('w-96 p-8'):
-            ui.label('Login').classes('text-h4 text-center mb-4')
+            # Logo and App Info
+            with ui.column().classes('w-full items-center mb-6'):
+                ui.image(APP_LOGO_PATH).classes('w-24 h-24 mb-3')
+                ui.label(APP_TITLE).classes('text-h4 text-center font-bold')
+                ui.label(f'Version {app_config.get("APP_VERSION")}').classes('text-caption text-center text-grey-6')
+            
+            ui.separator().classes('mb-4')
+            
+            ui.label('Login').classes('text-h5 text-center mb-4')
             
             with ui.column().classes('w-full gap-4'):
                 username_input = ui.input('Username', placeholder='Enter your username').classes('w-full').props('outlined')
@@ -68,6 +82,9 @@ def login_page():
 
 @ui.page('/')
 def main_page():
+    ui.page_title(APP_TITLE)
+    ui.add_head_html(f'<link rel="icon" href="{APP_LOGO_PATH}">')
+    
     if not user_session.get('authenticated'):
         ui.navigate.to('/login')
         return
@@ -90,6 +107,9 @@ def main_page():
     
 @ui.page('/dashboard')
 def dashboard():
+    ui.page_title(APP_TITLE)
+    ui.add_head_html(f'<link rel="icon" href="{APP_LOGO_PATH}">')
+    
     if not user_session.get('authenticated'):
         ui.navigate.to('/login')
         # Simple authentication (replace with actual authentication logic)
