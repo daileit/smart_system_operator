@@ -485,6 +485,56 @@ class UserManager:
             self.logger.error(f"Error getting all roles: {e}")
             return []
     
+    def get_all_pages(self) -> List[Dict[str, Any]]:
+        """
+        Get all available pages from database.
+        
+        Returns:
+            List of page dictionaries with page_id, page_name, and description
+        """
+        try:
+            query = """
+                SELECT page_id, page_name, description, created_at
+                FROM pages
+                ORDER BY page_id
+            """
+            pages = self.db.execute_query(query)
+            return pages
+            
+        except Exception as e:
+            self.logger.error(f"Error getting all pages: {e}")
+            return []
+    
+    def get_role_permissions_matrix(self) -> Dict[int, Dict[str, bool]]:
+        """
+        Get all role permissions as a matrix/map.
+        
+        Returns:
+            Dictionary mapping role_id to {page_id: can_access}
+            Example: {1: {'dashboard': True, 'users': True}, 2: {'dashboard': True, 'users': False}}
+        """
+        try:
+            query = """
+                SELECT role_id, page_id, can_access 
+                FROM role_permissions 
+                ORDER BY role_id, page_id
+            """
+            permissions = self.db.execute_query(query)
+            
+            # Create a map: {role_id: {page_id: can_access}}
+            perm_matrix = {}
+            for perm in permissions:
+                role_id = perm['role_id']
+                if role_id not in perm_matrix:
+                    perm_matrix[role_id] = {}
+                perm_matrix[role_id][perm['page_id']] = bool(perm['can_access'])
+            
+            return perm_matrix
+            
+        except Exception as e:
+            self.logger.error(f"Error getting role permissions matrix: {e}")
+            return {}
+    
     def _get_user_roles(self, user_id: int) -> List[Dict[str, Any]]:
         """
         Get roles for a user (internal helper method).

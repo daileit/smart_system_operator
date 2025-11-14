@@ -4,8 +4,11 @@ Provides CRUD operations for user management.
 """
 
 from nicegui import ui
+import jsonlog
 import user as user_module
 from .shared import APP_TITLE, APP_LOGO_PATH, user_session, db_client
+
+logger = jsonlog.setup_logger("users_page")
 
 
 @ui.page('/users')
@@ -307,3 +310,95 @@ def users_page():
             users_table.on('edit', lambda e: show_edit_dialog(e.args.get('user_id')))
             users_table.on('password', lambda e: show_password_dialog(e.args.get('username'), e.args.get('user_id')))
             users_table.on('delete', lambda e: confirm_delete(e.args.get('username'), e.args.get('user_id')))
+        
+        # Available Roles Section
+        with ui.card().classes('w-full mt-4'):
+            with ui.row().classes('w-full justify-between items-center mb-4'):
+                ui.label('Available Roles').classes('text-h5 font-bold')
+                ui.label(f'Total: {len(available_roles)}').classes('text-body2 text-grey-7')
+            
+            roles_columns = [
+                {'name': 'role_id', 'label': 'ID', 'field': 'role_id', 'sortable': True, 'align': 'left'},
+                {'name': 'role_name', 'label': 'Role Name', 'field': 'role_name', 'sortable': True, 'align': 'left'},
+                {'name': 'description', 'label': 'Description', 'field': 'description', 'align': 'left'},
+                {'name': 'created_at', 'label': 'Created At', 'field': 'created_at', 'sortable': True, 'align': 'left'},
+            ]
+            
+            def get_roles_rows():
+                rows = []
+                for role in available_roles:
+                    created_text = role['created_at'].strftime('%Y-%m-%d %H:%M') if role.get('created_at') else 'N/A'
+                    rows.append({
+                        'role_id': role['role_id'],
+                        'role_name': role['role_name'],
+                        'description': role.get('description', '-'),
+                        'created_at': created_text
+                    })
+                return rows
+            
+            roles_table = ui.table(
+                columns=roles_columns,
+                rows=get_roles_rows(),
+                row_key='role_id',
+                pagination={'rowsPerPage': 5}
+            ).classes('w-full')
+        
+        # Role Permissions Section
+        with ui.card().classes('w-full mt-4'):
+            ui.label('Role Permissions').classes('text-h5 font-bold mb-4')
+            
+            # Get all pages and permissions for each role from UserManager
+            all_pages = user_manager.get_all_pages()
+            permissions_map = user_manager.get_role_permissions_matrix()
+            
+            # Create permissions table
+            perm_columns = [
+                {'name': 'page', 'label': 'Page', 'field': 'page', 'align': 'left', 'sortable': True}
+            ]
+            
+            # Add a column for each role
+            for role in available_roles:
+                perm_columns.append({
+                    'name': f"role_{role['role_id']}", 
+                    'label': role['role_name'], 
+                    'field': f"role_{role['role_id']}", 
+                    'align': 'center'
+                })
+            
+            def get_permissions_rows():
+                rows = []
+                for page in all_pages:
+                    row = {
+                        'page': f"{page['page_name']} ({page['page_id']})"
+                    }
+                    
+                    # Add permission status for each role
+                    for role in available_roles:
+                        role_id = role['role_id']
+                        has_access = permissions_map.get(role_id, {}).get(page['page_id'], False)
+                        row[f"role_{role_id}"] = '✓ Allow' if has_access else '✗ Deny'
+                    
+                    rows.append(row)
+                return rows
+            
+            permissions_table = ui.table(
+                columns=perm_columns,
+                rows=get_permissions_rows(),
+                row_key='page',
+                pagination={'rowsPerPage': 10}
+            ).classes('w-full')
+            
+            # Style the permission cells
+            permissions_table.add_slot('body-cell', '''
+                <q-td :props="props">
+                    <span v-if="props.value && props.value.includes('Allow')" class="text-positive">
+                        {{ props.value }}
+                    </span>
+                    <span v-else-if="props.value && props.value.includes('Deny')" class="text-negative">
+                        {{ props.value }}
+                    </span>
+                    <span v-else>
+                        {{ props.value }}
+                    </span>
+                </q-td>
+            ''')
