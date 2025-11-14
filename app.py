@@ -364,7 +364,11 @@ def users_page():
         
         create_dialog.open()
     
-    def show_edit_dialog(user_obj):
+    def show_edit_dialog(user_id):
+        user_obj = user_manager.get_user_by_id(int(user_id))
+        if not user_obj:
+            ui.notify('User not found', type='negative')
+            return        
         # Check if this is sysadmin - if so, prevent editing critical fields
         is_sysadmin = user_obj.username == 'sysadmin'
         
@@ -434,9 +438,9 @@ def users_page():
         
         edit_dialog.open()
     
-    def show_password_dialog(user_obj):
+    def show_password_dialog(username, user_id):
         with ui.dialog() as password_dialog, ui.card().classes('w-96'):
-            ui.label(f'Change Password: {user_obj.username}').classes('text-h6 font-bold mb-4')
+            ui.label(f'Change Password: {username}').classes('text-h6 font-bold mb-4')
             
             new_password_input = ui.input('New Password', password=True).classes('w-full').props('outlined')
             confirm_password_input = ui.input('Confirm Password', password=True).classes('w-full').props('outlined')
@@ -454,7 +458,7 @@ def users_page():
                     ui.notify('Passwords do not match', type='negative')
                     return
                 
-                success = user_manager.update_password(user_obj.user_id, new_password_input.value)
+                success = user_manager.update_password(user_id, new_password_input.value)
                 
                 if success:
                     ui.notify('Password changed successfully!', type='positive')
@@ -464,18 +468,18 @@ def users_page():
         
         password_dialog.open()
     
-    def confirm_delete(user_obj):
+    def confirm_delete(username, user_id):
         # Prevent deletion of sysadmin
-        if user_obj.username == 'sysadmin':
+        if username == 'sysadmin':
             ui.notify('Cannot delete system administrator account', type='warning')
             return
         
         with ui.dialog() as delete_dialog, ui.card():
-            ui.label(f'Delete User: {user_obj.username}?').classes('text-h6 font-bold mb-4')
+            ui.label(f'Delete User: {username}?').classes('text-h6 font-bold mb-4')
             ui.label('This action cannot be undone.').classes('text-body2 text-red mb-4')
             
             with ui.row().classes('gap-2'):
-                ui.button('Delete', on_click=lambda: handle_delete(user_obj.user_id, delete_dialog)).props('color=negative')
+                ui.button('Delete', on_click=lambda: handle_delete(user_id, delete_dialog)).props('color=negative')
                 ui.button('Cancel', on_click=delete_dialog.close).props('outline')
         
         delete_dialog.open()
@@ -530,8 +534,7 @@ def users_page():
                         'full_name': user.full_name or '-',
                         'roles': roles_text or 'No roles',
                         'status': status_text,
-                        'created_at': created_text,
-                        'user_obj': user
+                        'created_at': created_text
                     })
                 return rows
             
@@ -558,25 +561,9 @@ def users_page():
             ''')
             
             # Handle table events
-            def handle_edit(e):
-                row = e.args if isinstance(e.args, dict) else e.args
-                user_obj = row.get('user_obj') if isinstance(row, dict) else row
-                show_edit_dialog(user_obj)
-            
-            def handle_password(e):
-                row = e.args if isinstance(e.args, dict) else e.args
-                user_obj = row.get('user_obj') if isinstance(row, dict) else row
-                show_password_dialog(user_obj)
-            
-            def handle_delete(e):
-                row = e.args if isinstance(e.args, dict) else e.args
-                user_obj = row.get('user_obj') if isinstance(row, dict) else row
-                confirm_delete(user_obj)
-            
-            users_table.on('edit', handle_edit)
-            users_table.on('password', handle_password)
-            users_table.on('delete', handle_delete)
-
+            users_table.on('edit', lambda e: show_edit_dialog(e.args.get('user_id')))
+            users_table.on('password', lambda e: show_password_dialog(e.args.get('username'), e.args.get('user_id')))
+            users_table.on('delete', lambda e: confirm_delete(e.args.get('username'), e.args.get('user_id')))
 
 
 # Mount NiceGUI on FastAPI
