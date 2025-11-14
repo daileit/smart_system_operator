@@ -7,7 +7,7 @@ logger = jsonlog.setup_logger("init")
 
 mysql_config = env_config.Config(group="MYSQL")
 
-def check_database_connection(db_client: db.MySQLClient) -> db.MySQLClient:
+def check_database_connection() -> db.MySQLClient:
     """Check if the database connection can be established."""
     db_client = db.MySQLClient(config={
         "host": mysql_config.get("MYSQL_HOST"),
