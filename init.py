@@ -117,16 +117,29 @@ def insert_default_data(db_client: db.MySQLClient, init_secret: str = ""):
         ]
         affected_rows = db_client.execute_many(admin_permissions_query, admin_permissions_data)
         logger.info(f"Inserted {affected_rows} admin permissions")
+
+        # Insert manager role permissions (limited access)
+        manager_permissions_query = "INSERT IGNORE INTO role_permissions (role_id, page_id, can_access) VALUES (%s, %s, %s)"
+        manager_permissions_data = [
+            (2, 'dashboard', 1),
+            (2, 'profile', 1),
+            (2, 'users', 0),
+            (2, 'reports', 1),
+            (2, 'settings', 0),
+            (2, 'analytics', 1)
+        ]
+        affected_rows = db_client.execute_many(manager_permissions_query, manager_permissions_data)
+        logger.info(f"Inserted {affected_rows} user permissions")
         
         # Insert user role permissions (limited access)
         user_permissions_query = "INSERT IGNORE INTO role_permissions (role_id, page_id, can_access) VALUES (%s, %s, %s)"
         user_permissions_data = [
-            (2, 'dashboard', 1),
-            (2, 'profile', 1),
-            (2, 'users', 0),
-            (2, 'reports', 0),
-            (2, 'settings', 0),
-            (2, 'analytics', 0)
+            (3, 'dashboard', 1),
+            (3, 'profile', 1),
+            (3, 'users', 0),
+            (3, 'reports', 0),
+            (3, 'settings', 0),
+            (3, 'analytics', 0)
         ]
         affected_rows = db_client.execute_many(user_permissions_query, user_permissions_data)
         logger.info(f"Inserted {affected_rows} user permissions")
