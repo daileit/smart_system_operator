@@ -287,6 +287,10 @@ def users_page():
     # Initialize UserManager
     user_manager = user_module.UserManager(db_client)
     
+    # Load all available roles
+    available_roles = user_manager.get_all_roles()
+    role_options = {role['role_id']: role['role_name'] for role in available_roles}
+    
     # Header
     with ui.header().classes('items-center justify-between bg-primary text-white'):
         with ui.row().classes('items-center gap-4'):
@@ -319,6 +323,14 @@ def users_page():
             full_name_input = ui.input('Full Name', placeholder='Enter full name').classes('w-full').props('outlined')
             password_input = ui.input('Password', placeholder='Enter password', password=True).classes('w-full').props('outlined')
             
+            # Role selection (multi-select)
+            roles_select = ui.select(
+                role_options,
+                label='Roles',
+                multiple=True,
+                value=[2]  # Default to 'user' role
+            ).classes('w-full').props('outlined use-chips')
+            
             with ui.row().classes('w-full gap-2 mt-4'):
                 ui.button('Create', on_click=lambda: handle_create()).props('color=primary')
                 ui.button('Cancel', on_click=create_dialog.close).props('outline')
@@ -328,13 +340,19 @@ def users_page():
                     ui.notify('Please fill in all required fields', type='warning')
                     return
                 
+                # Ensure at least one role is selected
+                selected_roles = roles_select.value if isinstance(roles_select.value, list) else [roles_select.value]
+                if not selected_roles:
+                    ui.notify('Please select at least one role', type='warning')
+                    return
+                
                 user_id = user_manager.create_user(
                     username=username_input.value,
                     email=email_input.value,
                     password=password_input.value,
                     full_name=full_name_input.value or None,
                     status=1,
-                    role_ids=[2]  # Default to 'user' role
+                    role_ids=selected_roles
                 )
                 
                 if user_id:
@@ -347,30 +365,65 @@ def users_page():
         create_dialog.open()
     
     def show_edit_dialog(user_obj):
+        # Check if this is sysadmin - if so, prevent editing critical fields
+        is_sysadmin = user_obj.username == 'sysadmin'
+        
         with ui.dialog() as edit_dialog, ui.card().classes('w-96'):
             ui.label(f'Edit User: {user_obj.username}').classes('text-h6 font-bold mb-4')
             
-            username_input = ui.input('Username', value=user_obj.username).classes('w-full').props('outlined')
-            email_input = ui.input('Email', value=user_obj.email).classes('w-full').props('outlined')
+            if is_sysadmin:
+                ui.label('⚠️ System administrator account - username and email are locked').classes('text-caption text-orange mb-2')
+            
+            username_input = ui.input('Username', value=user_obj.username).classes('w-full').props('outlined' + (' disable' if is_sysadmin else ''))
+            email_input = ui.input('Email', value=user_obj.email).classes('w-full').props('outlined' + (' disable' if is_sysadmin else ''))
             full_name_input = ui.input('Full Name', value=user_obj.full_name or '').classes('w-full').props('outlined')
             status_select = ui.select(
                 {1: 'Active', 0: 'Inactive'},
                 value=user_obj.status,
                 label='Status'
-            ).classes('w-full').props('outlined')
+            ).classes('w-full').props('outlined' + (' disable' if is_sysadmin else ''))
+            
+            # Role selection (multi-select)
+            current_role_ids = [role['role_id'] for role in (user_obj.roles or [])]
+            roles_select = ui.select(
+                role_options,
+                label='Roles',
+                multiple=True,
+                value=current_role_ids
+            ).classes('w-full').props('outlined use-chips' + (' disable' if is_sysadmin else ''))
             
             with ui.row().classes('w-full gap-2 mt-4'):
                 ui.button('Update', on_click=lambda: handle_update()).props('color=primary')
                 ui.button('Cancel', on_click=edit_dialog.close).props('outline')
             
             def handle_update():
-                success = user_manager.update_user(
-                    user_id=user_obj.user_id,
-                    username=username_input.value,
-                    email=email_input.value,
-                    full_name=full_name_input.value or None,
-                    status=status_select.value
-                )
+                # For sysadmin, only allow updating full_name
+                if is_sysadmin:
+                    success = user_manager.update_user(
+                        user_id=user_obj.user_id,
+                        full_name=full_name_input.value or None
+                    )
+                else:
+                    # Ensure at least one role is selected
+                    selected_roles = roles_select.value if isinstance(roles_select.value, list) else [roles_select.value]
+                    if not selected_roles:
+                        ui.notify('Please select at least one role', type='warning')
+                        return
+                    
+                    success = user_manager.update_user(
+                        user_id=user_obj.user_id,
+                        username=username_input.value,
+                        email=email_input.value,
+                        full_name=full_name_input.value or None,
+                        status=status_select.value
+                    )
+                    
+                    # Update roles - remove old roles and assign new ones
+                    if success and current_role_ids != selected_roles:
+                        # Remove all current roles
+                        user_manager.remove_roles(user_obj.user_id, current_role_ids)
+                        # Assign new roles
+                        user_manager.assign_roles(user_obj.user_id, selected_roles)
                 
                 if success:
                     ui.notify('User updated successfully!', type='positive')
@@ -412,6 +465,11 @@ def users_page():
         password_dialog.open()
     
     def confirm_delete(user_obj):
+        # Prevent deletion of sysadmin
+        if user_obj.username == 'sysadmin':
+            ui.notify('Cannot delete system administrator account', type='warning')
+            return
+        
         with ui.dialog() as delete_dialog, ui.card():
             ui.label(f'Delete User: {user_obj.username}?').classes('text-h6 font-bold mb-4')
             ui.label('This action cannot be undone.').classes('text-body2 text-red mb-4')

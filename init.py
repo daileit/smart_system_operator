@@ -140,7 +140,7 @@ def insert_default_data(db_client: db.MySQLClient, init_secret: str = ""):
         # Insert default admin user
         admin_user_query = "INSERT IGNORE INTO users (user_id, username, email, password_hash, full_name, status) VALUES (%s, %s, %s, %s, %s, %s)"
         admin_user_data = [
-            (1, 'admin', 'admin@timo.vn', password_hash, 'System Administrator', 1)            
+            (1, 'sysadmin', 'sysadmin@timo.vn', password_hash, 'System Administrator', 1)            
         ]
         affected_rows = db_client.execute_many(admin_user_query, admin_user_data)
         logger.info(f"Inserted {affected_rows} admin user")

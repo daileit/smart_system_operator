@@ -239,6 +239,21 @@ class UserManager:
             True if successful, False otherwise
         """
         try:
+            # Check if this is the sysadmin user - if so, prevent certain updates
+            current_user = self.get_user_by_id(user_id)
+            if current_user and current_user.username == 'sysadmin':
+                # Only allow updating full_name for sysadmin
+                if username is not None or email is not None or status is not None:
+                    self.logger.warning(f"Attempted to modify protected fields for sysadmin user")
+                    # Still allow full_name update
+                    if full_name is not None:
+                        query = "UPDATE users SET full_name = %s WHERE user_id = %s"
+                        affected_rows, _ = self.db.execute_update(query, (full_name, user_id))
+                        if affected_rows > 0:
+                            self.logger.info(f"Sysadmin full_name updated successfully")
+                            return True
+                    return False
+            
             updates = []
             params = []
             
@@ -314,6 +329,12 @@ class UserManager:
             True if successful, False otherwise
         """
         try:
+            # Prevent deletion of sysadmin user
+            user = self.get_user_by_id(user_id)
+            if user and user.username == 'sysadmin':
+                self.logger.warning("Attempted to delete sysadmin user - operation blocked")
+                return False
+            
             query = "DELETE FROM users WHERE user_id = %s"
             affected_rows, _ = self.db.execute_update(query, (user_id,))
             
@@ -364,6 +385,12 @@ class UserManager:
             True if successful, False otherwise
         """
         try:
+            # Prevent modifying roles for sysadmin user
+            user = self.get_user_by_id(user_id)
+            if user and user.username == 'sysadmin':
+                self.logger.warning("Attempted to modify roles for sysadmin user - operation blocked")
+                return False
+            
             if not role_ids:
                 return True
             
@@ -391,6 +418,12 @@ class UserManager:
             True if successful, False otherwise
         """
         try:
+            # Prevent modifying roles for sysadmin user
+            user = self.get_user_by_id(user_id)
+            if user and user.username == 'sysadmin':
+                self.logger.warning("Attempted to remove roles from sysadmin user - operation blocked")
+                return False
+            
             if not role_ids:
                 return True
             
@@ -429,6 +462,26 @@ class UserManager:
         except Exception as e:
             self.logger.error(f"Error getting user count: {e}")
             return 0
+    
+    def get_all_roles(self) -> List[Dict[str, Any]]:
+        """
+        Get all available roles from database.
+        
+        Returns:
+            List of role dictionaries with role_id, role_name, and description
+        """
+        try:
+            query = """
+                SELECT role_id, role_name, description, created_at
+                FROM roles
+                ORDER BY role_id
+            """
+            roles = self.db.execute_query(query)
+            return roles
+            
+        except Exception as e:
+            self.logger.error(f"Error getting all roles: {e}")
+            return []
     
     def _get_user_roles(self, user_id: int) -> List[Dict[str, Any]]:
         """
