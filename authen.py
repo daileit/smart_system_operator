@@ -1,6 +1,5 @@
 import jsonlog
 import database as db
-import config as env_config
 import bcrypt
 import user as user_module
 from typing import Optional, Dict, List, Any
@@ -49,7 +48,7 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
     """Verify a plain text password against a hashed password."""
     return bcrypt.checkpw(plain_password.encode('utf-8'), hashed_password.encode('utf-8'))
 
-def authenticate_user(username: str, password: str, mysql_client: db.MySQLClient) -> Optional[AuthUser]:
+def authenticate_user(username: str, password: str, mysql_client: db.MySQLClient):
     """
     Authenticate a user by username and password.
     Returns AuthUser object with roles and permissions if successful, None otherwise.
@@ -62,18 +61,21 @@ def authenticate_user(username: str, password: str, mysql_client: db.MySQLClient
         user = user_manager.get_user_by_username(username)
         
         if not user:
-            logger.warning(f"Authentication failed: User '{username}' not found.")
-            return None
+            message = f"User '{username}' not found."
+            logger.warning(f"Authentication failed: {message}")
+            return None, message
         
         # Check if user is active
         if user.status != 1:
-            logger.warning(f"Authentication failed: User '{username}' is inactive.")
-            return None
+            message = f"User '{username}' is disabled."
+            logger.warning(f"Authentication failed: {message}")
+            return None, message
         
         # Verify password
         if not verify_password(password, user.password_hash):
-            logger.warning(f"Authentication failed: Incorrect password for user '{username}'.")
-            return None
+            message = f"Incorrect password for user '{username}'."
+            logger.warning(f"Authentication failed: {message}")
+            return None, message
         
         # Get user permissions using UserManager
         permissions = user_manager.get_user_permissions(user.user_id)
@@ -90,8 +92,8 @@ def authenticate_user(username: str, password: str, mysql_client: db.MySQLClient
         )
         
         logger.info(f"User '{username}' authenticated successfully with {len(user.roles or [])} role(s).")
-        return auth_user
+        return auth_user, "Ok"
         
     except Exception as e:
         logger.error(f"Authentication error for user '{username}': {e}")
-        return None
+        return None, str(e)

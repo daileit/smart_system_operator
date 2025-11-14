@@ -54,7 +54,7 @@ def login_page():
             return
         
         # Authenticate user and get AuthUser object
-        auth_user = authen.authenticate_user(username, password, db_client)
+        auth_user, message = authen.authenticate_user(username, password, db_client)
         
         if auth_user:
             user_session['authenticated'] = True
@@ -63,7 +63,7 @@ def login_page():
             ui.notify(f'Welcome, {auth_user.full_name}!', type='positive')
             ui.navigate.to('/')
         else:
-            ui.notify('Invalid credentials', type='negative')
+            ui.notify(f'Invalid credentials: {message}', type='negative')
     
     with ui.column().classes('absolute-center items-center'):
         with ui.card().classes('w-96 p-8'):
