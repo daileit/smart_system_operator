@@ -250,6 +250,7 @@ def users_page():
             with ui.row().classes('gap-2'):
                 ui.button('Refresh', icon='refresh', on_click=refresh_users).props('outline color=primary')
                 ui.button('Create User', icon='person_add', on_click=show_create_dialog).props('color=primary')
+                ui.button('Back to Home', icon='home', on_click=lambda: ui.navigate.to('/')).props('color=primary')
         
         # Users table
         with ui.card().classes('w-full'):
@@ -317,8 +318,8 @@ def users_page():
                 with ui.column().classes('gap-1'):
                     ui.label('Role-Based Access Control Matrix').classes('text-h5 font-bold text-primary')
                     ui.label('View permissions for each role across all system pages').classes('text-body2 text-grey-6')
-                ui.icon('admin_panel_settings').classes('text-5xl text-primary opacity-20')
-            
+                ui.icon('admin_panel_settings').classes('text-5xl text-primary opacity-20')                
+
             # Get all pages and permissions for each role from UserManager
             all_pages = user_manager.get_all_pages()
             permissions_map = user_manager.get_role_permissions_matrix()
