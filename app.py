@@ -558,9 +558,25 @@ def users_page():
             ''')
             
             # Handle table events
-            users_table.on('edit', lambda e: show_edit_dialog(e.args['user_obj']))
-            users_table.on('password', lambda e: show_password_dialog(e.args['user_obj']))
-            users_table.on('delete', lambda e: confirm_delete(e.args['user_obj']))
+            def handle_edit(e):
+                row = e.args if isinstance(e.args, dict) else e.args
+                user_obj = row.get('user_obj') if isinstance(row, dict) else row
+                show_edit_dialog(user_obj)
+            
+            def handle_password(e):
+                row = e.args if isinstance(e.args, dict) else e.args
+                user_obj = row.get('user_obj') if isinstance(row, dict) else row
+                show_password_dialog(user_obj)
+            
+            def handle_delete(e):
+                row = e.args if isinstance(e.args, dict) else e.args
+                user_obj = row.get('user_obj') if isinstance(row, dict) else row
+                confirm_delete(user_obj)
+            
+            users_table.on('edit', handle_edit)
+            users_table.on('password', handle_password)
+            users_table.on('delete', handle_delete)
+
 
 
 # Mount NiceGUI on FastAPI
