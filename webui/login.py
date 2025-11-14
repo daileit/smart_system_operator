@@ -66,7 +66,7 @@ def login_page():
             ui.notify(f'Invalid credentials: {message}', type='negative')
     
     with ui.column().classes('absolute-center items-center'):
-        with ui.card().classes('w-96 p-8'):
+        with ui.card().classes('w-128 p-8'):
             # Logo and App Info
             with ui.column().classes('w-full items-center mb-6'):
                 ui.image(APP_LOGO_PATH).classes('w-24 h-24 mb-3')
@@ -82,5 +82,5 @@ def login_page():
                 password_input = ui.input('Password', placeholder='Enter your password', password=True, password_toggle_button=True).classes('w-full').props('outlined')
                 
                 with ui.row().classes('w-full gap-2 mt-4'):
-                    ui.button('Login', on_click=handle_login).classes('flex-1').props('color=primary')
-                    ui.button('Clear', on_click=lambda: (username_input.set_value(''), password_input.set_value(''))).classes('flex-1').props('outline')
+                    ui.button('Login', icon='login', on_click=handle_login).classes('flex-1').props('color=primary')
+                    ui.button('Clear', icon='clear', on_click=lambda: (username_input.set_value(''), password_input.set_value(''))).classes('flex-1').props('outline')
