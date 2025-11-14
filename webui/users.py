@@ -52,12 +52,11 @@ def users_page():
     
     # State management
     users_list = []
-    selected_user_id = None
     
     def refresh_users():
-        nonlocal users_list
-        users_list = user_manager.get_all_users()
-        users_table.update()
+        updated_list = user_manager.get_all_users()
+        users_table.clear()
+        users_table.add_rows(get_rows(updated_list))
     
     def show_create_dialog():
         with ui.dialog() as create_dialog, ui.card().classes('w-96'):
@@ -265,9 +264,9 @@ def users_page():
                 {'name': 'actions', 'label': 'Actions', 'field': 'actions', 'align': 'center'},
             ]
             
-            def get_rows():
+            def get_rows(users=users_list):
                 rows = []
-                for user in users_list:
+                for user in users:
                     roles_text = ', '.join([role['role_name'] for role in (user.roles or [])])
                     status_text = 'Active' if user.status == 1 else 'Inactive'
                     created_text = user.created_at.strftime('%Y-%m-%d %H:%M') if user.created_at else 'N/A'
