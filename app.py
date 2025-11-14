@@ -5,6 +5,7 @@ import jsonlog
 import uvicorn
 import config as env_config
 import init as app_init
+import authen
 
 app_config = env_config.Config(group="APP")
 
@@ -25,10 +26,12 @@ async def get_data():
 
 # Session management
 user_session = {}
+db_client = app_init.check_database_connection()
+
 system_status = {
-    "is_database_connected": app_init.check_database_connection(),
+    "is_database_connected": False if db_client is None else True,
     "is_alive": False,
-    "first_run": app_init.check_database_setup() == False
+    "first_run": app_init.check_database_setup(db_client) == False
 }
 
 APP_TITLE = "Smart System Operator"
@@ -43,7 +46,7 @@ def init_data():
     if system_status["first_run"]:
         logger.info("Initializing application data...")
         try:
-            app_init.initialize_database(init_secret=app_config.get("APP_INIT_SECRET"))    
+            app_init.initialize_database(db_client, init_secret=app_config.get("APP_INIT_SECRET"))    
             system_status["first_run"] = False
             logger.info("Application initialization complete")
             system_status["is_alive"] = True
@@ -68,10 +71,14 @@ def login_page():
             ui.notify('Please enter both username and password', type='warning')
             return
         
-        if username=='admin' and password== app_config.get("APP_INIT_SECRET"):
+        # Authenticate user and get AuthUser object
+        auth_user = authen.authenticate_user(username, password, db_client)
+        
+        if auth_user:
             user_session['authenticated'] = True
-            user_session['username'] = username
-            ui.notify(f'Welcome, {username}!', type='positive')
+            user_session['auth_user'] = auth_user.to_dict()
+            user_session['username'] = auth_user.username
+            ui.notify(f'Welcome, {auth_user.full_name}!', type='positive')
             ui.navigate.to('/')
         else:
             ui.notify('Invalid credentials', type='negative')
@@ -126,9 +133,15 @@ def dashboard():
     ui.page_title(APP_TITLE)
     ui.add_head_html(f'<link rel="icon" href="{APP_LOGO_PATH}">')
     
-    if not user_session.get('authenticated'):
+    if not user_session.get('authenticated') :
         ui.navigate.to('/login')
+        ui.notify('Unauthorized!Please log in to access the dashboard', type='warning')
         # Simple authentication (replace with actual authentication logic)
+        return
+    
+    if not user_session.get('auth_user')['permissions'][ui.context.client.page.path]:
+        ui.navigate.to('/')
+        ui.notify('Unauthorized!', type='warning')
         return
     
     username = user_session.get('username', 'User')

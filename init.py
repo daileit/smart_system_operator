@@ -7,16 +7,15 @@ logger = jsonlog.setup_logger("init")
 
 mysql_config = env_config.Config(group="MYSQL")
 
-db_client = db.MySQLClient(config={
-    "host": mysql_config.get("MYSQL_HOST"),
-    "user": mysql_config.get("MYSQL_USER"),
-    "password": mysql_config.get("MYSQL_PASSWORD"),
-    "database": mysql_config.get("MYSQL_DATABASE"),
-    "port": int(mysql_config.get("MYSQL_PORT", 3306))
-}, use_pool=True, pool_size=10)
-
-def check_database_connection():
+def check_database_connection(db_client: db.MySQLClient) -> db.MySQLClient:
     """Check if the database connection can be established."""
+    db_client = db.MySQLClient(config={
+        "host": mysql_config.get("MYSQL_HOST"),
+        "user": mysql_config.get("MYSQL_USER"),
+        "password": mysql_config.get("MYSQL_PASSWORD"),
+        "database": mysql_config.get("MYSQL_DATABASE"),
+        "port": int(mysql_config.get("MYSQL_PORT", 3306))
+    }, use_pool=True, pool_size=10)
     try:
         with db_client.get_connection() as conn:
             cursor = conn.cursor()
@@ -24,15 +23,15 @@ def check_database_connection():
             result = cursor.fetchone()
             if result and result[0] == 1:
                 logger.info("Database connection successful")
-                return True
+                return db_client
             else:
                 logger.error("Database connection test query failed")
-                return False
+                return None
     except Exception as e:
         logger.error(f"Database connection error: {e}")
-        return False
+        return None
 
-def check_database_setup():
+def check_database_setup(db_client: db.MySQLClient):
     """Check if essential database tables exist."""
     required_tables = ["users", "roles", "pages", "user_roles", "role_permissions"]
     try:
@@ -50,7 +49,7 @@ def check_database_setup():
         logger.error(f"Error checking database setup: {e}")
         return False
 
-def initialize_database(init_secret: str = ""):
+def initialize_database(db_client: db.MySQLClient, init_secret: str = ""):
     """Initialize the database with required tables and default data."""
     try:
         # Read SQL file
@@ -72,7 +71,7 @@ def initialize_database(init_secret: str = ""):
             logger.info("Database initialized successfully from system.sql")
             
         # Insert default data after successful initialization
-        insert_default_data(init_secret=init_secret)
+        insert_default_data(db_client=db_client, init_secret=init_secret)
         
     except FileNotFoundError:
         logger.error(f"SQL file not found: {sql_file_path}")
@@ -81,7 +80,7 @@ def initialize_database(init_secret: str = ""):
         logger.error(f"Error initializing database: {e}")
         raise
 
-def insert_default_data(init_secret: str = ""):
+def insert_default_data(db_client: db.MySQLClient, init_secret: str = ""):
     """Insert default data into the database."""
     try:
         # Insert predefined roles
@@ -141,7 +140,7 @@ def insert_default_data(init_secret: str = ""):
         # Insert default admin user
         admin_user_query = "INSERT IGNORE INTO users (user_id, username, email, password_hash, full_name, status) VALUES (%s, %s, %s, %s, %s, %s)"
         admin_user_data = [
-            (1, 'admin', 'admin@timo.vn', password_hash, 'System Administrator', 1)
+            (1, 'admin', 'admin@timo.vn', password_hash, 'System Administrator', 1)            
         ]
         affected_rows = db_client.execute_many(admin_user_query, admin_user_data)
         logger.info(f"Inserted {affected_rows} admin user")
