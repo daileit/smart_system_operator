@@ -46,11 +46,23 @@ jobs:
     - name: Set deploy tag
       id: deploy_tag
       run: |
-        # Extract version or use SHA
-        DEPLOY_TAG="${{ steps.meta.outputs.version }}"
+        # Extract tags and find semver or use last tag (SHA)
+        TAGS="${{ steps.meta.outputs.tags }}"
+        DEPLOY_TAG=""
+        
+        while IFS= read -r tag; do
+          TAG_NAME="${tag##*:}"          
+          if echo "$TAG_NAME" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            DEPLOY_TAG="$TAG_NAME"
+            break
+          fi
+          
+          LAST_TAG="$TAG_NAME"
+        done <<< "$TAGS"
         if [ -z "$DEPLOY_TAG" ]; then
-          DEPLOY_TAG="sha-$(echo ${{ github.sha }} | cut -c1-7)"
+          DEPLOY_TAG="$LAST_TAG"
         fi
+        
         echo "tag=$DEPLOY_TAG" >> $GITHUB_OUTPUT
         echo "Deploy tag: $DEPLOY_TAG"
           
