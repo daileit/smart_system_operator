@@ -283,7 +283,7 @@ class UserManager:
                 self.logger.info(f"User {user_id} updated successfully")
                 return True
             else:
-                self.logger.warning(f"No user found with ID {user_id}")
+                self.logger.warning(f"No user found to update with ID {user_id}")
                 return False
                 
         except Exception as e:
@@ -311,7 +311,7 @@ class UserManager:
                 self.logger.info(f"Password updated for user {user_id}")
                 return True
             else:
-                self.logger.warning(f"No user found with ID {user_id}")
+                self.logger.warning(f"No user found to update password with ID {user_id}")
                 return False
                 
         except Exception as e:
@@ -342,7 +342,7 @@ class UserManager:
                 self.logger.info(f"User {user_id} deleted successfully")
                 return True
             else:
-                self.logger.warning(f"No user found with ID {user_id}")
+                self.logger.warning(f"No user found to delete with ID {user_id}")
                 return False
                 
         except Exception as e:
