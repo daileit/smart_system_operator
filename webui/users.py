@@ -311,41 +311,13 @@ def users_page():
             users_table.on('password', lambda e: show_password_dialog(e.args.get('username'), e.args.get('user_id')))
             users_table.on('delete', lambda e: confirm_delete(e.args.get('username'), e.args.get('user_id')))
         
-        # Available Roles Section
-        with ui.card().classes('w-full mt-4'):
-            with ui.row().classes('w-full justify-between items-center mb-4'):
-                ui.label('Available Roles').classes('text-h5 font-bold')
-                ui.label(f'Total: {len(available_roles)}').classes('text-body2 text-grey-7')
-            
-            roles_columns = [
-                {'name': 'role_id', 'label': 'ID', 'field': 'role_id', 'sortable': True, 'align': 'left'},
-                {'name': 'role_name', 'label': 'Role Name', 'field': 'role_name', 'sortable': True, 'align': 'left'},
-                {'name': 'description', 'label': 'Description', 'field': 'description', 'align': 'left'},
-                {'name': 'created_at', 'label': 'Created At', 'field': 'created_at', 'sortable': True, 'align': 'left'},
-            ]
-            
-            def get_roles_rows():
-                rows = []
-                for role in available_roles:
-                    created_text = role['created_at'].strftime('%Y-%m-%d %H:%M') if role.get('created_at') else 'N/A'
-                    rows.append({
-                        'role_id': role['role_id'],
-                        'role_name': role['role_name'],
-                        'description': role.get('description', '-'),
-                        'created_at': created_text
-                    })
-                return rows
-            
-            roles_table = ui.table(
-                columns=roles_columns,
-                rows=get_roles_rows(),
-                row_key='role_id',
-                pagination={'rowsPerPage': 5}
-            ).classes('w-full')
-        
-        # Role Permissions Section
-        with ui.card().classes('w-full mt-4'):
-            ui.label('Role Permissions').classes('text-h5 font-bold mb-4')
+        # Role Permissions Matrix Section
+        with ui.card().classes('w-full mt-6 shadow-lg'):
+            with ui.row().classes('w-full justify-between items-center mb-6 pb-4 border-b'):
+                with ui.column().classes('gap-1'):
+                    ui.label('Role-Based Access Control Matrix').classes('text-h5 font-bold text-primary')
+                    ui.label('View permissions for each role across all system pages').classes('text-body2 text-grey-6')
+                ui.icon('admin_panel_settings').classes('text-5xl text-primary opacity-20')
             
             # Get all pages and permissions for each role from UserManager
             all_pages = user_manager.get_all_pages()
@@ -388,17 +360,44 @@ def users_page():
                 pagination={'rowsPerPage': 10}
             ).classes('w-full')
             
-            # Style the permission cells
+            # Add elegant styling with custom header and cell formatting
+            permissions_table.props('flat bordered dense').classes('shadow-sm')
+            
+            # Style the header
+            permissions_table.add_slot('header', '''
+                <q-tr :props="props">
+                    <q-th v-for="col in props.cols" :key="col.name" :props="props" 
+                          class="bg-blue-grey-1 text-primary font-bold text-uppercase">
+                        {{ col.label }}
+                    </q-th>
+                </q-tr>
+            ''')
+            
+            # Style the permission cells with icons and colors
             permissions_table.add_slot('body-cell', '''
                 <q-td :props="props">
-                    <span v-if="props.value && props.value.includes('Allow')" class="text-positive">
+                    <div v-if="props.col.name === 'page'" class="text-weight-medium">
                         {{ props.value }}
-                    </span>
-                    <span v-else-if="props.value && props.value.includes('Deny')" class="text-negative">
+                    </div>
+                    <div v-else-if="props.value && props.value.includes('Allow')" 
+                         class="text-center">
+                        <q-badge color="positive" class="q-pa-sm">
+                            <q-icon name="check_circle" size="xs" class="q-mr-xs" />
+                            <span class="text-weight-bold">Allow</span>
+                        </q-badge>
+                    </div>
+                    <div v-else-if="props.value && props.value.includes('Deny')" 
+                         class="text-center">
+                        <q-badge color="negative" outline class="q-pa-sm">
+                            <q-icon name="cancel" size="xs" class="q-mr-xs" />
+                            <span>Deny</span>
+                        </q-badge>
+                    </div>
+                    <div v-else>
                         {{ props.value }}
-                    </span>
-                    <span v-else>
-                        {{ props.value }}
-                    </span>
+                    </div>
                 </q-td>
             ''')
+            
+            # Add hover effect for rows
+            permissions_table.props('row-hover')
