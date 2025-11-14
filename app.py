@@ -4,6 +4,7 @@ from nicegui import ui
 import jsonlog
 import uvicorn
 import config as env_config
+import init as app_init
 
 app_config = env_config.Config(group="APP")
 
@@ -24,19 +25,30 @@ async def get_data():
 
 # Session management
 user_session = {}
-is_first_run = True  # Set to False after initialization
+system_status = {
+    "is_database_connected": app_init.check_database_connection(),
+    "is_alive": False,
+    "first_run": app_init.check_database_setup() == False
+}
 
 APP_TITLE = "Smart System Operator"
 APP_LOGO_PATH = '/assets/img/application-logo.png'
 
 def init_data():
+    global system_status
     """Initialize application data on first run"""
-    global is_first_run
-    logger.info("Initializing application data...")
-    # Add your initialization logic here
-    # e.g., create default admin user, setup database tables, etc.
-    is_first_run = False
-    logger.info("Application initialization complete")
+    if not system_status["is_database_connected"]:
+        logger.error("Cannot initialize application data: Database is not connected.")
+        return
+    if system_status["first_run"]:
+        logger.info("Initializing application data...")
+        try:
+            app_init.initialize_database(init_secret=app_config.get("APP_INIT_SECRET"))    
+            system_status["first_run"] = False
+            logger.info("Application initialization complete")
+            system_status["is_alive"] = True
+        except Exception as e:
+            logger.error(f"Initialization failed: {e}")
 
 # NiceGUI interface
 @ui.page('/login')
@@ -44,7 +56,7 @@ def login_page():
     ui.page_title(APP_TITLE)
     ui.add_head_html(f'<link rel="icon" href="{APP_LOGO_PATH}">')
     
-    if is_first_run:
+    if system_status["first_run"]:
         init_data()
         ui.notify('Application initialized successfully', type='positive')
     
@@ -70,7 +82,7 @@ def login_page():
             with ui.column().classes('w-full items-center mb-6'):
                 ui.image(APP_LOGO_PATH).classes('w-24 h-24 mb-3')
                 ui.label(APP_TITLE).classes('text-h4 text-center font-bold')
-                ui.label(f'Version {app_config.get("APP_VERSION")}').classes('text-caption text-center text-grey-6')
+                ui.label(f'Alive {system_status["is_alive"]}. Version {app_config.get("APP_VERSION")}').classes('text-caption text-center text-grey-6')
             
             ui.separator().classes('mb-4')
             

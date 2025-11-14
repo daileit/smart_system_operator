@@ -4,7 +4,6 @@ from typing import Dict, List, Any, Optional, Union, Tuple
 import jsonlog
 from contextlib import contextmanager
 import time
-import os
 import config as env_config
 
 logger = jsonlog.setup_logger("database")
