@@ -269,10 +269,12 @@ class UserManager:
             if status is not None:
                 updates.append("status = %s")
                 params.append(status)
-            
+          
             if not updates:
                 self.logger.warning(f"No updates provided for user {user_id}")
                 return False
+            
+            updates.append("updated_at = NOW()")
             
             query = f"UPDATE users SET {', '.join(updates)} WHERE user_id = %s"
             params.append(user_id)
