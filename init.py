@@ -87,7 +87,8 @@ def insert_default_data(db_client: db.MySQLClient, init_secret: str = ""):
         roles_query = "INSERT IGNORE INTO roles (role_id, role_name, description) VALUES (%s, %s, %s)"
         roles_data = [
             (1, 'admin', 'Administrator with full system access'),
-            (2, 'user', 'Regular user with limited access')
+            (2, 'manager', 'Manager with elevated access'),
+            (3, 'user', 'Regular user with limited access')
         ]
         affected_rows = db_client.execute_many(roles_query, roles_data)
         logger.info(f"Inserted {affected_rows} roles")
@@ -118,7 +119,7 @@ def insert_default_data(db_client: db.MySQLClient, init_secret: str = ""):
         affected_rows = db_client.execute_many(admin_permissions_query, admin_permissions_data)
         logger.info(f"Inserted {affected_rows} admin permissions")
 
-        # Insert manager role permissions (limited access)
+        # Insert manager role permissions (elevated access)
         manager_permissions_query = "INSERT IGNORE INTO role_permissions (role_id, page_id, can_access) VALUES (%s, %s, %s)"
         manager_permissions_data = [
             (2, 'dashboard', 1),
