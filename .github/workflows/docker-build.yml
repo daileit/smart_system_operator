@@ -42,6 +42,17 @@ jobs:
           type=semver,pattern={{major}}.{{minor}}
           type=raw,value=latest,enable={{is_default_branch}}
           type=sha
+    
+    - name: Set deploy tag
+      id: deploy_tag
+      run: |
+        # Extract version or use SHA
+        DEPLOY_TAG="${{ steps.meta.outputs.version }}"
+        if [ -z "$DEPLOY_TAG" ]; then
+          DEPLOY_TAG="sha-$(echo ${{ github.sha }} | cut -c1-7)"
+        fi
+        echo "tag=$DEPLOY_TAG" >> $GITHUB_OUTPUT
+        echo "Deploy tag: $DEPLOY_TAG"
           
     - name: Build and push
       uses: docker/build-push-action@v5
@@ -69,7 +80,7 @@ jobs:
       if: github.event_name != 'pull_request'
       run: |
         if [[ -n "${{ secrets.DEPLOY_HOOK_URL }}" ]]; then 
-          curl -X GET "${{ secrets.DEPLOY_HOOK_URL }}?repo=${{ secrets.DOCKERHUB_USERNAME }}&name=smart-system-operator&tag=${{ steps.meta.outputs.version }}"
+          curl -X GET "${{ secrets.DEPLOY_HOOK_URL }}?repo=${{ secrets.DOCKERHUB_USERNAME }}&name=smart-system-operator&tag=${{ steps.deploy_tag.outputs.tag }}"
         else
           echo "No deploy hook URL set, skipping."
         fi
