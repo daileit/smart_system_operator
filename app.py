@@ -30,7 +30,7 @@ db_client = app_init.check_database_connection()
 
 system_status = {
     "is_database_connected": False if db_client is None else True,
-    "is_alive": False,
+    "is_alive": False if db_client is None else True,
     "first_run": app_init.check_database_setup(db_client) == False
 }
 
@@ -41,6 +41,7 @@ def init_data():
     global system_status
     """Initialize application data on first run"""
     if not system_status["is_database_connected"]:
+        system_status["is_alive"] = False
         logger.error("Cannot initialize application data: Database is not connected.")
         return
     if system_status["first_run"]:
@@ -91,7 +92,7 @@ def login_page():
             with ui.column().classes('w-full items-center mb-6'):
                 ui.image(APP_LOGO_PATH).classes('w-24 h-24 mb-3')
                 ui.label(APP_TITLE).classes('text-h4 text-center font-bold')
-                ui.label(f'Alive {system_status["is_alive"]}. Version {app_config.get("APP_VERSION")}. \nReleased: {app_config.get("APP_DEPLOY_TIME")}').classes('text-caption text-center text-grey-6')
+                ui.label(f'Version {app_config.get("APP_VERSION")}. Released: {app_config.get("APP_DEPLOY_TIME")}').classes('text-caption text-center text-grey-6')
             
             ui.separator().classes('mb-4')
             
