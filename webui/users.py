@@ -55,8 +55,7 @@ def users_page():
     
     def refresh_users():
         updated_list = user_manager.get_all_users()
-        users_table.clear()
-        users_table.add_rows(get_rows(updated_list))
+        users_table.update_rows(rows=get_rows(updated_list), clear_selection = True)
     
     def show_create_dialog():
         with ui.dialog() as create_dialog, ui.card().classes('w-96'):
@@ -286,7 +285,7 @@ def users_page():
                 columns=columns,
                 rows=get_rows(),
                 row_key='user_id',
-                pagination={'rowsPerPage': 10, 'sortBy': 'user_id', 'descending': True}
+                pagination={'rowsPerPage': 10, 'sortBy': 'user_id', 'descending': False}
             ).classes('w-full')
             
             # Add action buttons in table
