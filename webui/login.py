@@ -70,13 +70,11 @@ def login_page():
             # Logo and App Info
             with ui.column().classes('w-full items-center mb-6'):
                 ui.image(APP_LOGO_PATH).classes('w-24 h-24 mb-3')
-                ui.label(APP_TITLE).classes('text-h4 text-center font-bold')
+                ui.label(APP_TITLE).classes('text-h4 text-center font-bold text-primary')
                 ui.label(f'Version {app_config.get("APP_VERSION")}. Released: {app_config.get("APP_DEPLOY_TIME")}').classes('text-caption text-center text-grey-6')
             
             ui.separator().classes('mb-4')
-            
-            ui.label('Login').classes('text-h5 text-center mb-4')
-            
+                        
             with ui.column().classes('w-full gap-4'):
                 username_input = ui.input('Username', placeholder='Enter your username').classes('w-full').props('outlined')
                 password_input = ui.input('Password', placeholder='Enter your password', password=True, password_toggle_button=True).classes('w-full').props('outlined')

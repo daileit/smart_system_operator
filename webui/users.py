@@ -244,7 +244,7 @@ def users_page():
         # Header section
         with ui.row().classes('w-full justify-between items-center'):
             with ui.column().classes('gap-1'):
-                ui.label('User Management').classes('text-h4 font-bold')
+                ui.label('User Management').classes('text-h4 font-bold text-primary')
                 ui.label(f'Total Users: {user_manager.get_user_count()}').classes('text-body2 text-grey-7')
             
             with ui.row().classes('gap-2'):
@@ -316,7 +316,7 @@ def users_page():
         with ui.card().classes('w-full mt-6 shadow-lg'):
             with ui.row().classes('w-full justify-between items-center mb-6 pb-4 border-b'):
                 with ui.column().classes('gap-1'):
-                    ui.label('Role-Based Access Control Matrix').classes('text-h5 font-bold text-primary')
+                    ui.label('Role-Based Access Control (RBAC) Table').classes('text-h5 font-bold text-primary')
                     ui.label('View permissions for each role across all system pages').classes('text-body2 text-grey-6')
                 ui.icon('admin_panel_settings').classes('text-5xl text-primary opacity-20')                
 
