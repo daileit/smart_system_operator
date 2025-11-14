@@ -140,12 +140,13 @@ def dashboard():
         # Simple authentication (replace with actual authentication logic)
         return
     
-    if not user_session.get('auth_user')['permissions'][f'{page_id}']:
+    username = user_session.get('username')
+    user_context = user_session.get('auth_user')    
+
+    if not user_context['permissions'][f'{page_id}']:
         ui.navigate.to('/')
         ui.notify('Unauthorized!', type='warning')
-        return
-    
-    username = user_session.get('auth_user').username
+        return  
     
     with ui.column().classes('w-full p-4'):
         with ui.row().classes('w-full justify-between items-center mb-4'):
@@ -154,7 +155,7 @@ def dashboard():
         
         with ui.card().classes('p-4'):
             ui.label(f'Welcome to the dashboard, {username}!').classes('text-h6')
-            ui.label(f'Here you can monitor system status and perform administrative tasks. Your permissions are {user_session.get("auth_user").permissions}').classes('text-body1 mb-4')
+            ui.label(f'Here you can monitor system status and perform administrative tasks. Your permissions are {user_context["permissions"]}').classes('text-body1 mb-4')
             
         with ui.row().classes('gap-4 mt-4'):
             ui.button('Back to Home', on_click=lambda: ui.navigate.to('/')).props('outline')

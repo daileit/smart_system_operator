@@ -3,7 +3,7 @@ import json
 import os
 from pythonjsonlogger import jsonlogger
 
-default_log_level = os.getenv("LOG_LEVEL", "INFO").upper()
+default_log_level = os.getenv("APP_LOG_LEVEL", "INFO").upper()
 
 class CustomJsonFormatter(jsonlogger.JsonFormatter):
     def __init__(self, *args, **kwargs):
