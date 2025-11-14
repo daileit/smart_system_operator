@@ -38,7 +38,7 @@ class Config:
     def _load_env_variables(self):
         """Load all environment variables into the config (override predefined if set)."""
         for key, value in os.environ.items():
-            self._configs[key] = value
+            self._configs[key.upper()] = value.strip()
     
     def _build_groups(self):
         """Build groups dictionary from all configs."""
