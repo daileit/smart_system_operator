@@ -132,6 +132,7 @@ def main_page():
 def dashboard():
     ui.page_title(APP_TITLE)
     ui.add_head_html(f'<link rel="icon" href="{APP_LOGO_PATH}">')
+    page_id = ui.context.client.page.path.lstrip('/')
     
     if not user_session.get('authenticated') :
         ui.navigate.to('/login')
@@ -139,12 +140,12 @@ def dashboard():
         # Simple authentication (replace with actual authentication logic)
         return
     
-    if not user_session.get('auth_user')['permissions'][ui.context.client.page.path]:
+    if not user_session.get('auth_user')['permissions'][f'{page_id}']:
         ui.navigate.to('/')
         ui.notify('Unauthorized!', type='warning')
         return
     
-    username = user_session.get('username', 'User')
+    username = user_session.get('auth_user').username
     
     with ui.column().classes('w-full p-4'):
         with ui.row().classes('w-full justify-between items-center mb-4'):
@@ -153,6 +154,7 @@ def dashboard():
         
         with ui.card().classes('p-4'):
             ui.label(f'Welcome to the dashboard, {username}!').classes('text-h6')
+            ui.label(f'Here you can monitor system status and perform administrative tasks. Your permissions are {user_session.get("auth_user").permissions}').classes('text-body1 mb-4')
             
         with ui.row().classes('gap-4 mt-4'):
             ui.button('Back to Home', on_click=lambda: ui.navigate.to('/')).props('outline')
