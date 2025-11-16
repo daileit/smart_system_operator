@@ -13,5 +13,5 @@ INSERT IGNORE INTO app_settings (setting_name, setting_value, setting_group, des
 VALUES
 ('APP_FONT', 'Inter', 'UI', 'Font chữ chính của ứng dụng'),
 ('APP_THEME', 'Light', 'UI', 'Giao diện Sáng (Light) hoặc Tối (Dark)'),
-('AI_MODEL', 'gpt-4o-mini', 'AI', 'Mô hình AI mặc định để phân tích'),
+('AI_MODEL', 'gpt-4o-mini', 'Gemini', 'Plexity'),
 ('ALERT_SEVERITY_THRESHOLD', 'WARNING', 'System', 'Ngưỡng cảnh báo tối thiểu để hiển thị');
