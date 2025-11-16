@@ -26,13 +26,7 @@ def main_page():
     permissions = auth_user.get('permissions', {})
     roles = auth_user.get('roles', [])
     role_names = ', '.join([role['role_name'] for role in roles])
-@ui.page('/settings')
-def settings_page_route():
-    # 1. Kiểm tra đăng nhập (copy từ trang main)
-    if not user_session.get('authenticated'):
-        ui.navigate.to('/login')
-        return
-       
+
     # Header
     with ui.header().classes('items-center justify-between bg-primary text-white'):
         with ui.row().classes('items-center gap-4'):
