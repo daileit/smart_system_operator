@@ -66,27 +66,37 @@ class SettingsManager:
     
     def set(self, name: str, value: str) -> bool:
         """
-        Update setting value by name (must be one of the predefined options).
+        Update setting value by name.
         
         Args:
             name: Setting name
-            value: New value (must exist in setting_options)
+            value: New value
             
         Returns:
             True if successful, False otherwise
         """
         try:
-            # Get setting_id first
-            setting = self.db.fetch_one(
-                "SELECT setting_id FROM app_settings WHERE setting_name = %s",
-                (name,)
-            )
+            # Check if setting has options
+            options = self.get_options(name)
             
-            if not setting:
+            # If options exist, validate the value
+            if options:
+                valid_values = [opt['option_value'] for opt in options]
+                if value not in valid_values:
+                    logger.warning(f"Invalid option '{value}' for setting '{name}'. Valid options: {valid_values}")
+                    return False
+            
+            # Update setting value
+            query = "UPDATE app_settings SET setting_value = %s WHERE setting_name = %s"
+            affected, _ = self.db.execute_update(query, (value, name))
+            
+            if affected > 0:
+                logger.info(f"Setting '{name}' updated to '{value}'")
+                self._cache.clear()
+                return True
+            else:
                 logger.warning(f"Setting '{name}' not found")
                 return False
-            
-            return self.set_by_id(setting['setting_id'], value)
                 
         except Exception as e:
             logger.error(f"Error setting '{name}' to '{value}': {e}")
@@ -94,42 +104,28 @@ class SettingsManager:
     
     def set_by_id(self, setting_id: int, value: str) -> bool:
         """
-        Update setting value by ID (must be one of the predefined options).
+        Update setting value by ID.
         
         Args:
             setting_id: Setting ID
-            value: New value (must exist in setting_options)
+            value: New value
             
         Returns:
             True if successful, False otherwise
         """
         try:
-            # Validate that the option exists
-            option = self.db.fetch_one(
-                "SELECT option_value FROM setting_options WHERE setting_id = %s AND option_value = %s",
-                (setting_id, value)
+            # Get setting name first
+            setting = self.db.fetch_one(
+                "SELECT setting_name FROM app_settings WHERE setting_id = %s",
+                (setting_id,)
             )
             
-            if not option:
-                logger.warning(f"Invalid option '{value}' for setting ID {setting_id}")
-                return False
-            
-            # Update setting
-            query = """
-                UPDATE app_settings 
-                SET setting_value = %s 
-                WHERE setting_id = %s
-            """
-            affected, _ = self.db.execute_update(query, (value, setting_id))
-            
-            if affected > 0:
-                logger.info(f"Setting ID {setting_id} updated to '{value}'")
-                # Clear cache
-                self._cache.clear()
-                return True
-            else:
+            if not setting:
                 logger.warning(f"Setting ID {setting_id} not found")
                 return False
+            
+            # Use set() method which handles validation
+            return self.set(setting['setting_name'], value)
                 
         except Exception as e:
             logger.error(f"Error setting ID {setting_id} to '{value}': {e}")
@@ -143,15 +139,14 @@ class SettingsManager:
             name: Setting name
             
         Returns:
-            List of option dictionaries with keys: option_value, option_label, is_default
+            List of option dictionaries with keys: option_value, option_label
         """
         try:
             query = """
-                SELECT so.option_value, so.option_label, so.is_default 
-                FROM setting_options so
-                JOIN app_settings s ON so.setting_id = s.setting_id
-                WHERE s.setting_name = %s 
-                ORDER BY so.display_order
+                SELECT option_value, option_label
+                FROM setting_options
+                WHERE setting_name = %s 
+                ORDER BY display_order
             """
             options = self.db.execute_query(query, (name,))
             return options
@@ -167,17 +162,19 @@ class SettingsManager:
             setting_id: Setting ID
             
         Returns:
-            List of option dictionaries with keys: option_value, option_label, is_default
+            List of option dictionaries with keys: option_value, option_label
         """
         try:
-            query = """
-                SELECT option_value, option_label, is_default 
-                FROM setting_options 
-                WHERE setting_id = %s 
-                ORDER BY display_order
-            """
-            options = self.db.execute_query(query, (setting_id,))
-            return options
+            # Get setting name first
+            setting = self.db.fetch_one(
+                "SELECT setting_name FROM app_settings WHERE setting_id = %s",
+                (setting_id,)
+            )
+            
+            if not setting:
+                return []
+            
+            return self.get_options(setting['setting_name'])
         except Exception as e:
             logger.error(f"Error getting options for setting ID {setting_id}: {e}")
             return []
@@ -261,7 +258,7 @@ class SettingsManager:
     
     def reset_to_default(self, name: str) -> bool:
         """
-        Reset a setting to its default value by name.
+        Reset a setting to its default value (first option) by name.
         
         Args:
             name: Setting name
@@ -270,27 +267,23 @@ class SettingsManager:
             True if successful, False otherwise
         """
         try:
-            # Get setting_id and default option
-            query = """
-                SELECT s.setting_id, so.option_value 
-                FROM app_settings s
-                JOIN setting_options so ON s.setting_id = so.setting_id
-                WHERE s.setting_name = %s AND so.is_default = 1
-            """
-            result = self.db.fetch_one(query, (name,))
+            # Get first option (default is the first one by display_order)
+            options = self.get_options(name)
             
-            if not result:
-                logger.warning(f"No default option found for setting '{name}'")
+            if not options:
+                logger.warning(f"No options found for setting '{name}'")
                 return False
             
-            return self.set_by_id(result['setting_id'], result['option_value'])
+            # Use first option as default
+            default_value = options[0]['option_value']
+            return self.set(name, default_value)
         except Exception as e:
             logger.error(f"Error resetting setting '{name}': {e}")
             return False
     
     def reset_to_default_by_id(self, setting_id: int) -> bool:
         """
-        Reset a setting to its default value by ID.
+        Reset a setting to its default value (first option) by ID.
         
         Args:
             setting_id: Setting ID
@@ -299,17 +292,17 @@ class SettingsManager:
             True if successful, False otherwise
         """
         try:
-            # Get default option
-            default = self.db.fetch_one(
-                "SELECT option_value FROM setting_options WHERE setting_id = %s AND is_default = 1",
+            # Get setting name
+            setting = self.db.fetch_one(
+                "SELECT setting_name FROM app_settings WHERE setting_id = %s",
                 (setting_id,)
             )
             
-            if not default:
-                logger.warning(f"No default option found for setting ID {setting_id}")
+            if not setting:
+                logger.warning(f"Setting ID {setting_id} not found")
                 return False
             
-            return self.set_by_id(setting_id, default['option_value'])
+            return self.reset_to_default(setting['setting_name'])
         except Exception as e:
             logger.error(f"Error resetting setting ID {setting_id}: {e}")
             return False

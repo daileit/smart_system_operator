@@ -183,35 +183,32 @@ def insert_default_data(db_client: db.DatabaseClient, init_secret: str = ""):
         logger.info(f"Assigned admin role to admin user")
         
         # Insert default application settings
-        settings_query = "INSERT IGNORE INTO app_settings (setting_id, setting_name, setting_value, setting_group, description, has_options) VALUES (%s, %s, %s, %s, %s, %s)"
+        settings_query = "INSERT IGNORE INTO app_settings (setting_name, setting_value, setting_group, description) VALUES (%s, %s, %s, %s)"
         settings_data = [
-            (1, 'APP_FONT', None, 'UI', 'Font chữ chính của ứng dụng', 1),  # has_options=1, value from options
-            (2, 'APP_THEME', None, 'UI', 'Giao diện Sáng (Light) hoặc Tối (Dark)', 1),  # has_options=1
-            (3, 'ALERT_SEVERITY_THRESHOLD', None, 'System', 'Ngưỡng cảnh báo tối thiểu để hiển thị', 1),  # has_options=1
+            ('APP_FONT', 'Inter', 'UI', 'Font chữ chính của ứng dụng'),
+            ('APP_THEME', 'Light', 'UI', 'Giao diện Sáng (Light) hoặc Tối (Dark)'),
+            ('ALERT_SEVERITY_THRESHOLD', 'WARNING', 'System', 'Ngưỡng cảnh báo tối thiểu để hiển thị'),
         ]
         affected_rows = db_client.execute_many(settings_query, settings_data)
         logger.info(f"Inserted {affected_rows} application settings")
         
         # Insert predefined setting options
-        options_query = "INSERT IGNORE INTO setting_options (setting_id, option_value, option_label, is_selected, display_order) VALUES (%s, %s, %s, %s, %s)"
+        options_query = "INSERT IGNORE INTO setting_options (setting_name, option_value, option_label, display_order) VALUES (%s, %s, %s, %s)"
         options_data = [
-            # Font options (setting_id=1)
-            (1, 'Inter', 'Inter (Default)', 1, 1),  # is_selected=1 (default)
-            (1, 'Roboto', 'Roboto', 0, 2),
-            (1, 'Open Sans', 'Open Sans', 0, 3),
-            (1, 'Lato', 'Lato', 0, 4),
-            (1, 'Poppins', 'Poppins', 0, 5),
+            ('APP_FONT', 'Inter', 'Inter (Default)', 1),
+            ('APP_FONT', 'Roboto', 'Roboto', 2),
+            ('APP_FONT', 'Open Sans', 'Open Sans', 3),
+            ('APP_FONT', 'Lato', 'Lato', 4),
+            ('APP_FONT', 'Poppins', 'Poppins', 5),
             
-            # Theme options (setting_id=2)
-            (2, 'Light', 'Light (Sáng)', 1, 1),  # is_selected=1 (default)
-            (2, 'Dark', 'Dark (Tối)', 0, 2),
-            (2, 'Auto', 'Auto (Tự động)', 0, 3),
+            ('APP_THEME', 'Light', 'Light (Sáng)', 1),
+            ('APP_THEME', 'Dark', 'Dark (Tối)', 2),
+            ('APP_THEME', 'Auto', 'Auto (Tự động)', 3),
             
-            # Alert severity options (setting_id=3)
-            (3, 'INFO', 'INFO (Thông tin)', 0, 1),
-            (3, 'WARNING', 'WARNING (Cảnh báo)', 1, 2),  # is_selected=1 (default)
-            (3, 'ERROR', 'ERROR (Lỗi)', 0, 3),
-            (3, 'CRITICAL', 'CRITICAL (Nghiêm trọng)', 0, 4),
+            ('ALERT_SEVERITY_THRESHOLD', 'INFO', 'INFO (Thông tin)', 1),
+            ('ALERT_SEVERITY_THRESHOLD', 'WARNING', 'WARNING (Cảnh báo)', 2),
+            ('ALERT_SEVERITY_THRESHOLD', 'ERROR', 'ERROR (Lỗi)', 3),
+            ('ALERT_SEVERITY_THRESHOLD', 'CRITICAL', 'CRITICAL (Nghiêm trọng)', 4),
         ]
         
         affected_rows = db_client.execute_many(options_query, options_data)
