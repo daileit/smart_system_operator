@@ -30,9 +30,11 @@ class RedisClient:
             logger.warning(f"Error deleting key {key}: {e}")
             return False
 
-    def set_string(self, key, value):
+    def set_string(self, key, value, ttl=None):
         # Set a string value in Redis
         self.client.set(key, value)
+        if ttl:
+            self.client.expire(key, ttl)
 
     def get_string(self, key):
         # Retrieve a string value from Redis

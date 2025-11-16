@@ -86,11 +86,8 @@ class OpenAIClient:
                 base_url = openai_config.get("OPENAI_BASE_URL", "https://api.openai.com/v1")
             
             if not api_key:
-                logger.warning("OPENAI_API_KEY not configured, using fallback model list")
-                return [
-                    ('gpt-4o-mini', 'GPT-4o Mini', True, 1),
-                    ('gpt-4o', 'GPT-4o', False, 2),
-                ]
+                logger.error("OPENAI_API_KEY not configured")
+                return None
             
             # Initialize client with base_url
             client = OpenAI(api_key=api_key, base_url=base_url)
@@ -141,22 +138,15 @@ class OpenAIClient:
             available_models = [(m[0], m[1], m[2], i+1) for i, m in enumerate(available_models)]
             
             if not available_models:
-                logger.warning(f"No models found from {base_url}, using fallback model list")
-                return [
-                    ('gpt-4o-mini', 'GPT-4o Mini', True, 1),
-                    ('gpt-4o', 'GPT-4o', False, 2),
-                ]
+                logger.warning(f"No models found from {base_url}")
+                return None
             
             logger.info(f"Fetched {len(available_models)} available models from {base_url} ({provider})")
             return available_models
             
         except Exception as e:
             logger.error(f"Error fetching models from {base_url}: {e}")
-            logger.warning("Using fallback model list")
-            return [
-                ('gpt-4o-mini', 'GPT-4o Mini', True, 1),
-                ('gpt-4o', 'GPT-4o', False, 2),
-            ]
+            return None
     
     def _init_system_prompt(self):
         """Initialize the system prompt for server management AI."""

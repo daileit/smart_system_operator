@@ -4,6 +4,8 @@ import jsonlog
 import bcrypt
 import os
 from pathlib import Path
+from redis_cache import RedisClient
+from openai_client import OpenAIClient
 
 logger = jsonlog.setup_logger("init")
 
@@ -50,6 +52,37 @@ def check_database_setup(db_client: db.DatabaseClient):
             return True
     except Exception as e:
         logger.error(f"Error checking database setup: {e}")
+        return False
+
+def check_redis_connection():
+    """Check if Redis connection can be established."""
+    try:
+        redis_client = RedisClient()
+        # Try to ping Redis
+        test_key = "connection_test"
+        test_value = "ok"
+        redis_client.set_string(test_key, test_value)
+        result = redis_client.get_string(test_key)
+        redis_client.delete_key(test_key)
+        
+        if result == test_value:
+            logger.info("Redis connection successful")
+            return True
+        else:
+            logger.error("Redis connection test failed")
+            return False
+    except Exception as e:
+        logger.error(f"Redis connection error: {e}")
+        return False
+
+def check_openai_connection():
+    """Check if OpenAI API connection can be established."""
+    try:
+        openai_client = OpenAIClient()
+        logger.info("OpenAI client initialized successfully")
+        return True if openai_client.fetch_available_models() is not None else False            
+    except Exception as e:
+        logger.error(f"OpenAI connection error: {e}")
         return False
 
 def initialize_database(db_client: db.DatabaseClient, init_secret: str = ""):
