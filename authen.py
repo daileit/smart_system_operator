@@ -48,14 +48,14 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
     """Verify a plain text password against a hashed password."""
     return bcrypt.checkpw(plain_password.encode('utf-8'), hashed_password.encode('utf-8'))
 
-def authenticate_user(username: str, password: str, mysql_client: db.MySQLClient):
+def authenticate_user(username: str, password: str, db_client: db.DatabaseClient):
     """
     Authenticate a user by username and password.
     Returns AuthUser object with roles and permissions if successful, None otherwise.
     """
     try:
         # Initialize UserManager
-        user_manager = user_module.UserManager(mysql_client)
+        user_manager = user_module.UserManager(db_client)
         
         # Get user by username
         user = user_manager.get_user_by_username(username)

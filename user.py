@@ -37,8 +37,8 @@ class User:
 class UserManager:
     """User management with CRUD operations."""
     
-    def __init__(self, mysql_client: db.MySQLClient):
-        self.db = mysql_client
+    def __init__(self, db_client: db.DatabaseClient):
+        self.db = db_client
         self.logger = logger
     
     def create_user(self, username: str, email: str, password: str, full_name: Optional[str] = None, 

@@ -2,14 +2,16 @@ import database as db
 import config as env_config
 import jsonlog
 import bcrypt
+import os
+from pathlib import Path
 
 logger = jsonlog.setup_logger("init")
 
 mysql_config = env_config.Config(group="MYSQL")
 
-def check_database_connection() -> db.MySQLClient:
+def check_database_connection() -> db.DatabaseClient:
     """Check if the database connection can be established."""
-    db_client = db.MySQLClient(config={
+    db_client = db.DatabaseClient(config={
         "host": mysql_config.get("MYSQL_HOST"),
         "user": mysql_config.get("MYSQL_USER"),
         "password": mysql_config.get("MYSQL_PASSWORD"),
@@ -31,7 +33,7 @@ def check_database_connection() -> db.MySQLClient:
         logger.error(f"Database connection error: {e}")
         return None
 
-def check_database_setup(db_client: db.MySQLClient):
+def check_database_setup(db_client: db.DatabaseClient):
     """Check if essential database tables exist."""
     required_tables = ["users", "roles", "pages", "user_roles", "role_permissions"]
     try:
@@ -49,38 +51,52 @@ def check_database_setup(db_client: db.MySQLClient):
         logger.error(f"Error checking database setup: {e}")
         return False
 
-def initialize_database(db_client: db.MySQLClient, init_secret: str = ""):
-    """Initialize the database with required tables and default data."""
+def initialize_database(db_client: db.DatabaseClient, init_secret: str = ""):
+    """Initialize the database with required tables and default data by loading all SQL schema files."""
     try:
-        # Read SQL file
-        sql_file_path = "./init/database/system.sql"
-        with open(sql_file_path, 'r', encoding='utf-8') as f:
-            sql_script = f.read()
+        # Get all SQL files from the init/database directory
+        sql_directory = Path("./init/database")
+        sql_files = sorted(sql_directory.glob("*.sql"))
+        
+        if not sql_files:
+            logger.warning("No SQL schema files found in ./init/database")
+            return
+        
+        logger.info(f"Found {len(sql_files)} SQL schema files to execute")
         
         with db_client.get_connection() as conn:
             cursor = conn.cursor()
             
-            # Split the script into individual statements
-            statements = [stmt.strip() for stmt in sql_script.split(';') if stmt.strip()]
-            
-            # Execute each statement
-            for statement in statements:
-                cursor.execute(statement)
+            # Execute each SQL file
+            for sql_file in sql_files:
+                logger.info(f"Executing schema file: {sql_file.name}")
+                
+                with open(sql_file, 'r', encoding='utf-8') as f:
+                    sql_script = f.read()
+                
+                # Split the script into individual statements
+                statements = [stmt.strip() for stmt in sql_script.split(';') if stmt.strip()]
+                
+                # Execute each statement
+                for statement in statements:
+                    cursor.execute(statement)
+                
+                logger.info(f"Successfully executed {sql_file.name}")
             
             conn.commit()
-            logger.info("Database initialized successfully from system.sql")
+            logger.info("Database schema initialized successfully from all SQL files")
             
         # Insert default data after successful initialization
         insert_default_data(db_client=db_client, init_secret=init_secret)
         
-    except FileNotFoundError:
-        logger.error(f"SQL file not found: {sql_file_path}")
+    except FileNotFoundError as e:
+        logger.error(f"SQL file not found: {e}")
         raise
     except Exception as e:
         logger.error(f"Error initializing database: {e}")
         raise
 
-def insert_default_data(db_client: db.MySQLClient, init_secret: str = ""):
+def insert_default_data(db_client: db.DatabaseClient, init_secret: str = ""):
     """Insert default data into the database."""
     try:
         # Insert predefined roles
@@ -164,6 +180,45 @@ def insert_default_data(db_client: db.MySQLClient, init_secret: str = ""):
         user_role_data = [(1, 1)]
         affected_rows = db_client.execute_many(user_role_query, user_role_data)
         logger.info(f"Assigned admin role to admin user")
+        
+        # Insert default application settings
+        settings_query = "INSERT IGNORE INTO app_settings (setting_id, setting_name, setting_value, setting_group, description) VALUES (%s, %s, %s, %s, %s)"
+        settings_data = [
+            (1, 'APP_FONT', 'Inter', 'UI', 'Font chữ chính của ứng dụng'),
+            (2, 'APP_THEME', 'Light', 'UI', 'Giao diện Sáng (Light) hoặc Tối (Dark)'),
+            (3, 'AI_MODEL', 'gpt-4o-mini', 'AI', 'Mô hình AI sử dụng'),
+            (4, 'ALERT_SEVERITY_THRESHOLD', 'WARNING', 'System', 'Ngưỡng cảnh báo tối thiểu để hiển thị')
+        ]
+        affected_rows = db_client.execute_many(settings_query, settings_data)
+        logger.info(f"Inserted {affected_rows} application settings")
+        
+        # Insert predefined setting options
+        options_query = "INSERT IGNORE INTO setting_options (setting_id, option_value, option_label, is_default, display_order) VALUES (%s, %s, %s, %s, %s)"
+        options_data = [
+            (1, 'Inter', 'Inter (Default)', 1, 1),
+            (1, 'Roboto', 'Roboto', 0, 2),
+            (1, 'Open Sans', 'Open Sans', 0, 3),
+            (1, 'Lato', 'Lato', 0, 4),
+            (1, 'Poppins', 'Poppins', 0, 5),
+            
+            (2, 'Light', 'Light (Sáng)', 1, 1),
+            (2, 'Dark', 'Dark (Tối)', 0, 2),
+            (2, 'Auto', 'Auto (Tự động)', 0, 3),
+            
+            (3, 'gpt-4o-mini', 'GPT-4o Mini (OpenAI)', 1, 1),
+            (3, 'gpt-4o', 'GPT-4o (OpenAI)', 0, 2),
+            (3, 'gemini-pro', 'Gemini Pro (Google)', 0, 3),
+            (3, 'gemini-flash', 'Gemini Flash (Google)', 0, 4),
+            (3, 'claude-3-opus', 'Claude 3 Opus (Anthropic)', 0, 5),
+            (3, 'claude-3-sonnet', 'Claude 3 Sonnet (Anthropic)', 0, 6),
+            
+            (4, 'INFO', 'INFO (Thông tin)', 0, 1),
+            (4, 'WARNING', 'WARNING (Cảnh báo)', 1, 2),
+            (4, 'ERROR', 'ERROR (Lỗi)', 0, 3),
+            (4, 'CRITICAL', 'CRITICAL (Nghiêm trọng)', 0, 4),
+        ]
+        affected_rows = db_client.execute_many(options_query, options_data)
+        logger.info(f"Inserted {affected_rows} setting options")
         
         logger.info("Default data inserted successfully")
         

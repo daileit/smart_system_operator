@@ -18,7 +18,7 @@ default_config = {
     "port": 3306
 }
 
-class MySQLClient:
+class DatabaseClient:
     def __init__(self, config: Dict[str, Any] = default_config, use_pool: bool = False, pool_size: int = 5, max_retries: int = 3, database: Optional[str] = None):
         """
         Initialize MySQL client with connection parameters.
