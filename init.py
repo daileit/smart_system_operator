@@ -35,7 +35,7 @@ def check_database_connection() -> db.DatabaseClient:
 
 def check_database_setup(db_client: db.DatabaseClient):
     """Check if essential database tables exist."""
-    required_tables = ["users", "roles", "pages", "user_roles", "role_permissions"]
+    required_tables = ["users", "roles", "pages", "user_roles", "role_permissions", "app_settings", "setting_options"]
     try:
         with db_client.get_connection() as conn:
             cursor = conn.cursor()
