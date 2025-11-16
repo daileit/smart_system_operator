@@ -117,7 +117,7 @@ def insert_default_data(db_client: db.DatabaseClient, init_secret: str = ""):
             ('users', 'User Management', 'Manage system users'),
             ('reports', 'Reports', 'View system reports'),
             ('settings', 'System Settings', 'System configuration'),
-            ('analytics', 'Analytics', 'Data analytics and insights')
+            ('servers', 'Servers', 'Server management and monitoring')
         ]
         affected_rows = db_client.execute_many(pages_query, pages_data)
         logger.info(f"Inserted {affected_rows} pages")
@@ -130,7 +130,7 @@ def insert_default_data(db_client: db.DatabaseClient, init_secret: str = ""):
             (1, 'users', 1),
             (1, 'reports', 1),
             (1, 'settings', 1),
-            (1, 'analytics', 1)
+            (1, 'servers', 1)
         ]
         affected_rows = db_client.execute_many(admin_permissions_query, admin_permissions_data)
         logger.info(f"Inserted {affected_rows} admin permissions")
@@ -143,7 +143,7 @@ def insert_default_data(db_client: db.DatabaseClient, init_secret: str = ""):
             (2, 'users', 0),
             (2, 'reports', 1),
             (2, 'settings', 0),
-            (2, 'analytics', 1)
+            (2, 'servers', 1)
         ]
         affected_rows = db_client.execute_many(manager_permissions_query, manager_permissions_data)
         logger.info(f"Inserted {affected_rows} user permissions")
@@ -156,7 +156,7 @@ def insert_default_data(db_client: db.DatabaseClient, init_secret: str = ""):
             (3, 'users', 0),
             (3, 'reports', 0),
             (3, 'settings', 0),
-            (3, 'analytics', 0)
+            (3, 'servers', 0)
         ]
         affected_rows = db_client.execute_many(user_permissions_query, user_permissions_data)
         logger.info(f"Inserted {affected_rows} user permissions")

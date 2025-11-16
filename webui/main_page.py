@@ -53,8 +53,8 @@ def main_page():
             nav_items = [
                 {'id': 'dashboard', 'icon': 'dashboard', 'label': 'Dashboard', 'path': '/dashboard'},
                 {'id': 'users', 'icon': 'people', 'label': 'Users', 'path': '/users'},
+                {'id': 'servers', 'icon': 'dns', 'label': 'Servers', 'path': '/servers'},
                 {'id': 'reports', 'icon': 'assessment', 'label': 'Reports', 'path': '/reports'},
-                {'id': 'analytics', 'icon': 'analytics', 'label': 'Analytics', 'path': '/analytics'},
                 {'id': 'settings', 'icon': 'settings', 'label': 'Settings', 'path': '/settings'},
             ]
             
@@ -112,15 +112,16 @@ def main_page():
                 if permissions.get('dashboard', False):
                     with ui.button('Dashboard', icon='dashboard', on_click=lambda: ui.navigate.to('/dashboard')).props('color=primary'):
                         pass
+                if permissions.get('servers', False):
+                    with ui.button('Servers', icon='dns', on_click=lambda: ui.navigate.to('/servers')).props('outline color=secondary'):
+                        pass
                 if permissions.get('users', False):
                     with ui.button('Manage Users', icon='people', on_click=lambda: ui.navigate.to('/users')).props('color=secondary'):
                         pass
                 if permissions.get('reports', False):
                     with ui.button('View Reports', icon='assessment', on_click=lambda: ui.navigate.to('/reports')).props('outline color=primary'):
                         pass
-                if permissions.get('analytics', False):
-                    with ui.button('Analytics', icon='analytics', on_click=lambda: ui.navigate.to('/analytics')).props('outline color=secondary'):
-                        pass
+
         
         # System information
         with ui.card().classes('w-full'):
