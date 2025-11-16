@@ -89,7 +89,8 @@ class RedisClient:
             if ttl:
                 self.client.expire(key, ttl)
         except Exception as e:
-            logger.warning(f"Error in append_json_list_with_limit: {str(e)}")
+            logger.error(f"Error in append_json_list_with_limit: {str(e)}")
+            logger.warning(f"Error value: {str(value)}")
 
     def exists(self, key):
         # Check if the key exists in the Redis database
