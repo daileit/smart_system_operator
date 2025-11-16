@@ -36,39 +36,51 @@ class AIDecision:
 class OpenAIClient:
     """OpenAI client for AI-powered server management decisions."""
     
-    def __init__(self, api_key: Optional[str] = None, model: Optional[str] = None):
+    def __init__(self, api_key: Optional[str] = None, model: Optional[str] = None, base_url: Optional[str] = None):
         """
         Initialize OpenAI client.
         
         Args:
             api_key: OpenAI API key (defaults to env config)
             model: Model to use (defaults to env config or gpt-4o)
+            base_url: API base URL (defaults to env config or https://api.openai.com/v1)
         """
-        self.api_key = api_key or env_config.Config(group="OPENAI").get("API_KEY")
-        self.model = model or env_config.Config(group="OPENAI").get("MODEL", "gpt-4o")
+        openai_config = env_config.Config(group="OPENAI")
+        
+        self.api_key = api_key or openai_config.get("OPENAI_API_KEY")
+        self.model = model or openai_config.get("OPENAI_MODEL", "gpt-4o")
+        self.base_url = base_url or openai_config.get("OPENAI_BASE_URL", "https://api.openai.com/v1")
         
         if not self.api_key:
             logger.error("OpenAI API key not configured")
             raise ValueError("OpenAI API key is required")
         
-        self.client = OpenAI(api_key=self.api_key)
+        # Initialize client with base_url support
+        self.client = OpenAI(api_key=self.api_key, base_url=self.base_url)
         self.logger = logger
+        
+        logger.info(f"OpenAI client initialized with base_url: {self.base_url}, model: {self.model}")
     
     @staticmethod
-    def fetch_available_models(api_key: Optional[str] = None) -> List[Tuple[str, str, bool, int]]:
+    def fetch_available_models(api_key: Optional[str] = None, base_url: Optional[str] = None) -> List[Tuple[str, str, bool, int]]:
         """
         Fetch available models from OpenAI API.
         
         Args:
             api_key: OpenAI API key (defaults to env config)
+            base_url: API base URL (defaults to env config)
             
         Returns:
             List of tuples: (model_id, label, is_default, display_order)
         """
         try:
+            openai_config = env_config.Config(group="OPENAI")
+            
             if not api_key:
-                openai_config = env_config.Config(group="OPENAI")
                 api_key = openai_config.get("OPENAI_API_KEY")
+            
+            if not base_url:
+                base_url = openai_config.get("OPENAI_BASE_URL", "https://api.openai.com/v1")
             
             if not api_key:
                 logger.warning("OPENAI_API_KEY not configured, using fallback model list")
@@ -77,23 +89,32 @@ class OpenAIClient:
                     ('gpt-4o', 'GPT-4o (OpenAI)', False, 2),
                 ]
             
-            client = OpenAI(api_key=api_key)
+            # Initialize client with base_url
+            client = OpenAI(api_key=api_key, base_url=base_url)
             models_response = client.models.list()
             
             # Filter for GPT models only (exclude embedding, tts, whisper, etc.)
             gpt_models = []
             display_order = 1
             
+            # Determine default model from config
+            default_model = openai_config.get("OPENAI_MODEL", "gpt-4o-mini")
+            
             for model in models_response.data:
                 model_id = model.id
                 # Include only GPT chat models
                 if any(prefix in model_id for prefix in ['gpt-4', 'gpt-3.5']):
-                    # Set gpt-4o-mini as default
-                    is_default = model_id == 'gpt-4o-mini'
+                    # Set default based on config
+                    is_default = model_id == default_model
                     
                     # Create friendly label
                     label = model_id.upper().replace('-', ' ').replace('_', ' ')
-                    label = f"{label} (OpenAI)"
+                    
+                    # Add API provider info based on base_url
+                    if 'azure' in base_url.lower():
+                        label = f"{label} (Azure OpenAI)"
+                    else:
+                        label = f"{label} (OpenAI)"
                     
                     gpt_models.append((model_id, label, is_default, display_order))
                     display_order += 1
@@ -111,11 +132,11 @@ class OpenAIClient:
                     ('gpt-4o', 'GPT-4o (OpenAI)', False, 2),
                 ]
             
-            logger.info(f"Fetched {len(gpt_models)} available OpenAI models")
+            logger.info(f"Fetched {len(gpt_models)} available models from {base_url}")
             return gpt_models
             
         except Exception as e:
-            logger.error(f"Error fetching OpenAI models: {e}")
+            logger.error(f"Error fetching models from {base_url}: {e}")
             logger.warning("Using fallback model list")
             return [
                 ('gpt-4o-mini', 'GPT-4o Mini (OpenAI)', True, 1),
