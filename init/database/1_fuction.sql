@@ -17,7 +17,7 @@ CREATE TABLE IF NOT EXISTS servers (
     ip_address VARCHAR(45) NOT NULL,
     port INT DEFAULT 22,
     username VARCHAR(50) NOT NULL,
-    ssh_key_path VARCHAR(500) NOT NULL,
+    ssh_private_key TEXT NOT NULL,
     description TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,

@@ -64,7 +64,7 @@ def servers_page():
         updated_list = server_manager.get_all_servers(include_actions=True)
         servers_table.update_rows(rows=get_rows(updated_list), clear_selection=True)
     
-    def test_connection(host, port, username, ssh_key_path, test_button=None):
+    def test_connection(host, port, username, ssh_private_key, test_button=None):
         """Test SSH connection to server."""
         try:
             if test_button:
@@ -74,7 +74,7 @@ def servers_page():
                 host=host,
                 port=int(port),
                 username=username,
-                ssh_key_path=ssh_key_path,
+                ssh_private_key=ssh_private_key,
                 command='echo "Connection test successful"',
                 timeout=10
             )
@@ -98,7 +98,7 @@ def servers_page():
     def show_create_dialog():
         connection_tested = {'value': False}
         
-        with ui.dialog() as create_dialog, ui.card().classes('w-[600px]'):
+        with ui.dialog() as create_dialog, ui.card().classes('w-[600px] max-h-[80vh]').style('overflow-y: auto;'):
             ui.label('Add New Server').classes('text-h6 font-bold mb-4')
             
             with ui.row().classes('w-full gap-4'):
@@ -113,10 +113,15 @@ def servers_page():
                 with ui.column().classes('w-1/2 gap-2'):
                     username_input = ui.input('SSH Username', placeholder='e.g., root') \
                         .classes('w-full').props('outlined')
-                    ssh_key_input = ui.input('SSH Key Path', placeholder='/path/to/private_key') \
-                        .classes('w-full').props('outlined')
                     description_input = ui.textarea('Description', placeholder='Optional description') \
-                        .classes('w-full').props('outlined')
+                        .classes('w-full').props('outlined rows=3')
+            
+            # SSH Private Key input
+            ui.label('SSH Private Key').classes('text-subtitle2 font-bold mt-2')
+            ui.label('Paste your private key content (PEM format)').classes('text-caption text-grey-7 mb-1')
+            ssh_key_input = ui.textarea(
+                placeholder='-----BEGIN OPENSSH PRIVATE KEY-----\n...\n-----END OPENSSH PRIVATE KEY-----'
+            ).classes('w-full font-mono text-sm').props('outlined rows=6')
             
             # Connection test section
             with ui.card().classes('w-full bg-blue-grey-1 mt-2'):
@@ -129,7 +134,7 @@ def servers_page():
             
             def handle_test():
                 if not ip_input.value or not username_input.value or not ssh_key_input.value:
-                    ui.notify('Please fill in IP, username, and SSH key path first', type='warning')
+                    ui.notify('Please fill in IP, username, and SSH private key first', type='warning')
                     return
                 
                 connection_status.text = 'Testing...'
@@ -152,18 +157,6 @@ def servers_page():
                     connection_status.text = '✗ Connection failed'
                     connection_status.classes('text-caption text-negative')
             
-            # Actions selection
-            ui.separator().classes('my-4')
-            ui.label('Allowed Actions').classes('text-subtitle2 font-bold mb-2')
-            ui.label('Select actions that can be executed on this server').classes('text-caption text-grey-7 mb-2')
-            
-            actions_select = ui.select(
-                action_options,
-                label='Actions',
-                multiple=True,
-                value=[]
-            ).classes('w-full').props('outlined use-chips')
-            
             with ui.row().classes('w-full gap-2 mt-4'):
                 ui.button('Create Server', icon='add', on_click=lambda: handle_create()).props('color=primary')
                 ui.button('Cancel', on_click=create_dialog.close).props('outline')
@@ -177,23 +170,19 @@ def servers_page():
                     ui.notify('Please test the connection before creating the server', type='warning')
                     return
                 
-                selected_actions = actions_select.value if isinstance(actions_select.value, list) else (
-                    [actions_select.value] if actions_select.value else []
-                )
-                
                 server_id = server_manager.create_server(
                     name=name_input.value,
                     ip_address=ip_input.value,
                     username=username_input.value,
-                    ssh_key_path=ssh_key_input.value,
+                    ssh_private_key=ssh_key_input.value,
                     port=int(port_input.value or 22),
                     description=description_input.value or None,
                     created_by=user_id,
-                    action_ids=selected_actions
+                    action_ids=[]  # Actions assigned separately
                 )
                 
                 if server_id:
-                    ui.notify(f'Server created successfully!', type='positive')
+                    ui.notify(f'Server created successfully! Now assign actions to it.', type='positive')
                     create_dialog.close()
                     refresh_servers()
                 else:
@@ -209,7 +198,7 @@ def servers_page():
         
         connection_tested = {'value': True}  # Already exists, so initial test passed
         
-        with ui.dialog() as edit_dialog, ui.card().classes('w-[600px]'):
+        with ui.dialog() as edit_dialog, ui.card().classes('w-[600px] max-h-[80vh]').style('overflow-y: auto;'):
             ui.label(f'Edit Server: {server["name"]}').classes('text-h6 font-bold mb-4')
             
             with ui.row().classes('w-full gap-4'):
@@ -224,11 +213,17 @@ def servers_page():
                 with ui.column().classes('w-1/2 gap-2'):
                     username_input = ui.input('SSH Username', value=server['username']) \
                         .classes('w-full').props('outlined')
-                    ssh_key_input = ui.input('SSH Key Path', value=server['ssh_key_path']) \
-                        .classes('w-full').props('outlined')
                     description_input = ui.textarea('Description', 
                                                    value=server.get('description') or '') \
-                        .classes('w-full').props('outlined')
+                        .classes('w-full').props('outlined rows=3')
+            
+            # SSH Private Key input
+            ui.label('SSH Private Key').classes('text-subtitle2 font-bold mt-2')
+            ui.label('Update private key or leave as is').classes('text-caption text-grey-7 mb-1')
+            ssh_key_input = ui.textarea(
+                value=server.get('ssh_private_key', ''),
+                placeholder='-----BEGIN OPENSSH PRIVATE KEY-----\n...\n-----END OPENSSH PRIVATE KEY-----'
+            ).classes('w-full font-mono text-sm').props('outlined rows=6')
             
             # Connection test section
             with ui.card().classes('w-full bg-blue-grey-1 mt-2'):
@@ -242,7 +237,7 @@ def servers_page():
             
             def handle_test():
                 if not ip_input.value or not username_input.value or not ssh_key_input.value:
-                    ui.notify('Please fill in IP, username, and SSH key path first', type='warning')
+                    ui.notify('Please fill in IP, username, and SSH private key first', type='warning')
                     return
                 
                 connection_status.text = 'Testing...'
@@ -264,18 +259,6 @@ def servers_page():
                     connection_tested['value'] = False
                     connection_status.text = '✗ Connection failed'
                     connection_status.classes('text-caption text-negative')
-            
-            # Actions selection
-            ui.separator().classes('my-4')
-            ui.label('Allowed Actions').classes('text-subtitle2 font-bold mb-2')
-            
-            current_action_ids = [action['id'] for action in server.get('allowed_actions', [])]
-            actions_select = ui.select(
-                action_options,
-                label='Actions',
-                multiple=True,
-                value=current_action_ids
-            ).classes('w-full').props('outlined use-chips')
             
             with ui.row().classes('w-full gap-2 mt-4'):
                 ui.button('Update Server', icon='save', on_click=lambda: handle_update()).props('color=primary')
@@ -292,21 +275,11 @@ def servers_page():
                     ip_address=ip_input.value,
                     port=int(port_input.value or 22),
                     username=username_input.value,
-                    ssh_key_path=ssh_key_input.value,
+                    ssh_private_key=ssh_key_input.value,
                     description=description_input.value or None
                 )
                 
                 if success:
-                    # Update actions - remove old and add new
-                    selected_actions = actions_select.value if isinstance(actions_select.value, list) else (
-                        [actions_select.value] if actions_select.value else []
-                    )
-                    
-                    if set(current_action_ids) != set(selected_actions):
-                        server_manager.detach_all_actions(server['id'])
-                        if selected_actions:
-                            server_manager.attach_actions(server['id'], selected_actions)
-                    
                     ui.notify('Server updated successfully!', type='positive')
                     edit_dialog.close()
                     refresh_servers()
@@ -314,6 +287,109 @@ def servers_page():
                     ui.notify('Failed to update server', type='negative')
         
         edit_dialog.open()
+    
+    def show_assign_actions_dialog(server_id):
+        """Show dialog to assign/manage actions for a server."""
+        server = server_manager.get_server(int(server_id), include_actions=True)
+        if not server:
+            ui.notify('Server not found', type='negative')
+            return
+        
+        current_action_ids = [action['id'] for action in server.get('allowed_actions', [])]
+        
+        with ui.dialog() as assign_dialog, ui.card().classes('w-[700px] max-h-[80vh]').style('overflow-y: auto;'):
+            ui.label(f'Assign Actions: {server["name"]}').classes('text-h6 font-bold mb-2')
+            ui.label(f'{server["ip_address"]}:{server["port"]}').classes('text-caption text-grey-7 mb-4')
+            
+            # Group actions by type
+            cmd_execute = [a for a in available_actions if a['action_type'] == 'command_execute']
+            cmd_get = [a for a in available_actions if a['action_type'] == 'command_get']
+            http_actions = [a for a in available_actions if a['action_type'] == 'http']
+            
+            selected_actions = []
+            
+            # Execute Commands section
+            with ui.expansion('Execute Commands (Modify Server State)', icon='warning') \
+                .classes('w-full bg-orange-1').props('default-opened'):
+                ui.label(f'{len(cmd_execute)} available actions - HIGH/MEDIUM RISK operations') \
+                    .classes('text-caption text-grey-7 mb-2')
+                
+                for action in cmd_execute:
+                    with ui.row().classes('w-full items-start gap-2 mb-2'):
+                        checkbox = ui.checkbox(value=action['id'] in current_action_ids)
+                        with ui.column().classes('flex-grow gap-1'):
+                            ui.label(action['action_name']).classes('text-body2 font-bold')
+                            ui.label(action['description']).classes('text-caption text-grey-7')
+                        
+                        # Store checkbox reference
+                        checkbox.on_value_change(lambda e, aid=action['id']: 
+                            selected_actions.append(aid) if e.value and aid not in selected_actions 
+                            else selected_actions.remove(aid) if not e.value and aid in selected_actions 
+                            else None
+                        )
+                        if action['id'] in current_action_ids:
+                            selected_actions.append(action['id'])
+            
+            # Get Information section
+            with ui.expansion('Get Information (Read-Only Operations)', icon='info') \
+                .classes('w-full bg-green-1 mt-2').props('default-opened'):
+                ui.label(f'{len(cmd_get)} available actions - SAFE monitoring operations') \
+                    .classes('text-caption text-grey-7 mb-2')
+                
+                for action in cmd_get:
+                    with ui.row().classes('w-full items-start gap-2 mb-2'):
+                        checkbox = ui.checkbox(value=action['id'] in current_action_ids)
+                        with ui.column().classes('flex-grow gap-1'):
+                            ui.label(action['action_name']).classes('text-body2 font-bold')
+                            ui.label(action['description']).classes('text-caption text-grey-7')
+                        
+                        checkbox.on_value_change(lambda e, aid=action['id']: 
+                            selected_actions.append(aid) if e.value and aid not in selected_actions 
+                            else selected_actions.remove(aid) if not e.value and aid in selected_actions 
+                            else None
+                        )
+                        if action['id'] in current_action_ids:
+                            selected_actions.append(action['id'])
+            
+            # HTTP Requests section
+            if http_actions:
+                with ui.expansion('HTTP Requests (API Integrations)', icon='http') \
+                    .classes('w-full bg-blue-1 mt-2'):
+                    ui.label(f'{len(http_actions)} available actions - External API calls') \
+                        .classes('text-caption text-grey-7 mb-2')
+                    
+                    for action in http_actions:
+                        with ui.row().classes('w-full items-start gap-2 mb-2'):
+                            checkbox = ui.checkbox(value=action['id'] in current_action_ids)
+                            with ui.column().classes('flex-grow gap-1'):
+                                ui.label(action['action_name']).classes('text-body2 font-bold')
+                                ui.label(action['description']).classes('text-caption text-grey-7')
+                            
+                            checkbox.on_value_change(lambda e, aid=action['id']: 
+                                selected_actions.append(aid) if e.value and aid not in selected_actions 
+                                else selected_actions.remove(aid) if not e.value and aid in selected_actions 
+                                else None
+                            )
+                            if action['id'] in current_action_ids:
+                                selected_actions.append(action['id'])
+            
+            ui.separator().classes('my-4')
+            
+            with ui.row().classes('w-full gap-2'):
+                ui.button('Save Actions', icon='save', on_click=lambda: handle_assign()).props('color=primary')
+                ui.button('Cancel', on_click=assign_dialog.close).props('outline')
+            
+            def handle_assign():
+                # Update actions
+                server_manager.detach_all_actions(server_id)
+                if selected_actions:
+                    server_manager.attach_actions(server_id, selected_actions)
+                
+                ui.notify(f'Actions updated! {len(selected_actions)} actions assigned.', type='positive')
+                assign_dialog.close()
+                refresh_servers()
+        
+        assign_dialog.open()
     
     def show_actions_dialog(server_id):
         server = server_manager.get_server(int(server_id), include_actions=True)
@@ -491,11 +567,14 @@ def servers_page():
             # Add action buttons in table
             servers_table.add_slot('body-cell-actions_btn', '''
                 <q-td :props="props">
-                    <q-btn flat dense round icon="edit" color="primary" size="sm" @click="$parent.$emit('edit', props.row)">
-                        <q-tooltip>Edit Server</q-tooltip>
+                    <q-btn flat dense round icon="link" color="primary" size="sm" @click="$parent.$emit('assign', props.row)">
+                        <q-tooltip>Assign Actions</q-tooltip>
                     </q-btn>
-                    <q-btn flat dense round icon="settings" color="secondary" size="sm" @click="$parent.$emit('manage', props.row)">
-                        <q-tooltip>Manage Actions</q-tooltip>
+                    <q-btn flat dense round icon="visibility" color="info" size="sm" @click="$parent.$emit('view', props.row)">
+                        <q-tooltip>View Actions</q-tooltip>
+                    </q-btn>
+                    <q-btn flat dense round icon="edit" color="secondary" size="sm" @click="$parent.$emit('edit', props.row)">
+                        <q-tooltip>Edit Server</q-tooltip>
                     </q-btn>
                     <q-btn flat dense round icon="delete" color="negative" size="sm" @click="$parent.$emit('delete', props.row)">
                         <q-tooltip>Delete Server</q-tooltip>
@@ -504,39 +583,114 @@ def servers_page():
             ''')
             
             # Handle table events
+            servers_table.on('assign', lambda e: show_assign_actions_dialog(e.args.get('id')))
+            servers_table.on('view', lambda e: show_actions_dialog(e.args.get('id')))
             servers_table.on('edit', lambda e: show_edit_dialog(e.args.get('id')))
-            servers_table.on('manage', lambda e: show_actions_dialog(e.args.get('id')))
             servers_table.on('delete', lambda e: confirm_delete(e.args.get('name'), e.args.get('id')))
         
-        # Actions overview section
-        with ui.card().classes('w-full mt-6 shadow-lg'):
-            with ui.row().classes('w-full justify-between items-center mb-6 pb-4 border-b'):
-                with ui.column().classes('gap-1'):
-                    ui.label('Available Actions Overview').classes('text-h5 font-bold text-primary')
-                    ui.label(f'Total of {len(available_actions)} predefined actions available') \
-                        .classes('text-body2 text-grey-6')
-                ui.icon('bolt').classes('text-5xl text-primary opacity-20')
+        # Group actions by type for overview section
+        cmd_execute = [a for a in available_actions if a['action_type'] == 'command_execute']
+        cmd_get = [a for a in available_actions if a['action_type'] == 'command_get']
+        http_actions = [a for a in available_actions if a['action_type'] == 'http']
+        
+        # Actions overview section - Redesigned
+        with ui.card().classes('w-full mt-6 shadow-lg bg-gradient-to-br from-blue-50 to-indigo-50'):
+            with ui.row().classes('w-full justify-between items-center mb-6 pb-4 border-b-2 border-indigo-200'):
+                with ui.column().classes('gap-2'):
+                    ui.label('Available Actions Library').classes('text-h4 font-bold text-indigo-900')
+                    ui.label('Pre-configured actions ready to assign to your servers') \
+                        .classes('text-body2 text-grey-7')
+                ui.icon('widgets').classes('text-6xl text-indigo-300')
             
-            # Group actions by type
-            cmd_execute = [a for a in available_actions if a['action_type'] == 'command_execute']
-            cmd_get = [a for a in available_actions if a['action_type'] == 'command_get']
-            http_actions = [a for a in available_actions if a['action_type'] == 'http']
+            with ui.row().classes('w-full gap-6'):
+                # Execute Commands card - Redesigned
+                with ui.card().classes('flex-1 hover:shadow-xl transition-shadow cursor-pointer') \
+                    .style('background: linear-gradient(135deg, #fff5f5 0%, #ffe0e0 100%); border-left: 6px solid #ff6b6b;'):
+                    with ui.column().classes('gap-3 p-4'):
+                        with ui.row().classes('items-center justify-between'):
+                            ui.icon('bolt').classes('text-4xl text-red-600')
+                            ui.badge(f'{len(cmd_execute)}', color='red').props('floating')
+                        
+                        ui.label('Execute Commands').classes('text-h6 font-bold text-red-900')
+                        ui.label('Modify server state & configuration').classes('text-caption text-grey-700')
+                        
+                        ui.separator().classes('my-2')
+                        
+                        with ui.column().classes('gap-1'):
+                            ui.label('Examples:').classes('text-caption font-bold text-grey-800')
+                            for action in cmd_execute[:3]:
+                                with ui.row().classes('items-start gap-2'):
+                                    ui.icon('circle', size='xs').classes('text-red-400 mt-1')
+                                    ui.label(action['action_name']).classes('text-caption text-grey-700')
+                        
+                        with ui.row().classes('items-center gap-2 mt-2'):
+                            ui.icon('warning').classes('text-orange text-sm')
+                            ui.label('HIGH/MEDIUM RISK').classes('text-caption font-bold text-orange')
+                
+                # Get Information card - Redesigned
+                with ui.card().classes('flex-1 hover:shadow-xl transition-shadow cursor-pointer') \
+                    .style('background: linear-gradient(135deg, #f0fff4 0%, #c6f6d5 100%); border-left: 6px solid #48bb78;'):
+                    with ui.column().classes('gap-3 p-4'):
+                        with ui.row().classes('items-center justify-between'):
+                            ui.icon('search').classes('text-4xl text-green-600')
+                            ui.badge(f'{len(cmd_get)}', color='green').props('floating')
+                        
+                        ui.label('Get Information').classes('text-h6 font-bold text-green-900')
+                        ui.label('Monitor & gather system data').classes('text-caption text-grey-700')
+                        
+                        ui.separator().classes('my-2')
+                        
+                        with ui.column().classes('gap-1'):
+                            ui.label('Examples:').classes('text-caption font-bold text-grey-800')
+                            for action in cmd_get[:3]:
+                                with ui.row().classes('items-start gap-2'):
+                                    ui.icon('circle', size='xs').classes('text-green-400 mt-1')
+                                    ui.label(action['action_name']).classes('text-caption text-grey-700')
+                        
+                        with ui.row().classes('items-center gap-2 mt-2'):
+                            ui.icon('check_circle').classes('text-green text-sm')
+                            ui.label('SAFE READ-ONLY').classes('text-caption font-bold text-green')
+                
+                # HTTP Requests card - Redesigned
+                with ui.card().classes('flex-1 hover:shadow-xl transition-shadow cursor-pointer') \
+                    .style('background: linear-gradient(135deg, #ebf8ff 0%, #bee3f8 100%); border-left: 6px solid #4299e1;'):
+                    with ui.column().classes('gap-3 p-4'):
+                        with ui.row().classes('items-center justify-between'):
+                            ui.icon('http').classes('text-4xl text-blue-600')
+                            ui.badge(f'{len(http_actions)}', color='blue').props('floating')
+                        
+                        ui.label('HTTP Requests').classes('text-h6 font-bold text-blue-900')
+                        ui.label('External API integrations').classes('text-caption text-grey-700')
+                        
+                        ui.separator().classes('my-2')
+                        
+                        if http_actions:
+                            with ui.column().classes('gap-1'):
+                                ui.label('Examples:').classes('text-caption font-bold text-grey-800')
+                                for action in http_actions[:3]:
+                                    with ui.row().classes('items-start gap-2'):
+                                        ui.icon('circle', size='xs').classes('text-blue-400 mt-1')
+                                        ui.label(action['action_name']).classes('text-caption text-grey-700')
+                        else:
+                            ui.label('No HTTP actions configured').classes('text-caption text-grey-500 italic')
+                        
+                        with ui.row().classes('items-center gap-2 mt-2'):
+                            ui.icon('language').classes('text-blue text-sm')
+                            ui.label('EXTERNAL CALLS').classes('text-caption font-bold text-blue')
             
-            with ui.row().classes('w-full gap-4'):
-                # Execute commands card
-                with ui.card().classes('w-1/3 bg-orange-1 border-l-4 border-orange'):
-                    ui.label('Execute Commands').classes('text-subtitle1 font-bold text-orange-9')
-                    ui.label(f'{len(cmd_execute)} actions').classes('text-h5 font-bold text-orange-9')
-                    ui.label('Modify server state').classes('text-caption text-grey-7')
+            # Action statistics
+            ui.separator().classes('my-4')
+            with ui.row().classes('w-full justify-center gap-8'):
+                with ui.column().classes('items-center'):
+                    ui.label(f'{len(available_actions)}').classes('text-h4 font-bold text-indigo-900')
+                    ui.label('Total Actions').classes('text-caption text-grey-600')
                 
-                # Get commands card
-                with ui.card().classes('w-1/3 bg-green-1 border-l-4 border-green'):
-                    ui.label('Get Information').classes('text-subtitle1 font-bold text-green-9')
-                    ui.label(f'{len(cmd_get)} actions').classes('text-h5 font-bold text-green-9')
-                    ui.label('Read-only operations').classes('text-caption text-grey-7')
+                with ui.column().classes('items-center'):
+                    ui.label(f'{len([s for s in servers_list if s.get("allowed_actions")])}') \
+                        .classes('text-h4 font-bold text-indigo-900')
+                    ui.label('Servers Configured').classes('text-caption text-grey-600')
                 
-                # HTTP requests card
-                with ui.card().classes('w-1/3 bg-blue-1 border-l-4 border-blue'):
-                    ui.label('HTTP Requests').classes('text-subtitle1 font-bold text-blue-9')
-                    ui.label(f'{len(http_actions)} actions').classes('text-h5 font-bold text-blue-9')
-                    ui.label('API integrations').classes('text-caption text-grey-7')
+                with ui.column().classes('items-center'):
+                    total_assignments = sum(len(s.get('allowed_actions', [])) for s in servers_list)
+                    ui.label(f'{total_assignments}').classes('text-h4 font-bold text-indigo-900')
+                    ui.label('Total Assignments').classes('text-caption text-grey-600')

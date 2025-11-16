@@ -20,7 +20,7 @@ class Server:
     ip_address: str = ""
     port: int = 22
     username: str = ""
-    ssh_key_path: str = ""
+    ssh_private_key: str = ""
     description: Optional[str] = None
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
@@ -35,7 +35,7 @@ class Server:
             'ip_address': self.ip_address,
             'port': self.port,
             'username': self.username,
-            'ssh_key_path': self.ssh_key_path,
+            'ssh_private_key': self.ssh_private_key,
             'description': self.description,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None,
@@ -51,7 +51,7 @@ class ServerManager:
         self.db = db_client
         self.logger = logger
     
-    def create_server(self, name: str, ip_address: str, username: str, ssh_key_path: str,
+    def create_server(self, name: str, ip_address: str, username: str, ssh_private_key: str,
                      port: int = 22, description: Optional[str] = None, 
                      created_by: Optional[int] = None,
                      action_ids: Optional[List[int]] = None) -> Optional[int]:
@@ -62,7 +62,7 @@ class ServerManager:
             name: Server name
             ip_address: Server IP address
             username: SSH username
-            ssh_key_path: Path to SSH key file
+            ssh_private_key: SSH private key content (PEM format)
             port: SSH port (default: 22)
             description: Server description
             created_by: User ID who created the server
@@ -83,13 +83,13 @@ class ServerManager:
             
             # Insert server
             query = """
-                INSERT INTO servers (name, ip_address, port, username, ssh_key_path, 
+                INSERT INTO servers (name, ip_address, port, username, ssh_private_key, 
                                    description, created_by)
                 VALUES (%s, %s, %s, %s, %s, %s, %s)
             """
             server_id = self.db.execute_update(
                 query, 
-                (name, ip_address, port, username, ssh_key_path, description, created_by)
+                (name, ip_address, port, username, ssh_private_key, description, created_by)
             )
             
             if server_id and action_ids:
@@ -169,7 +169,7 @@ class ServerManager:
     
     def update_server(self, server_id: int, name: Optional[str] = None, 
                      ip_address: Optional[str] = None, port: Optional[int] = None,
-                     username: Optional[str] = None, ssh_key_path: Optional[str] = None,
+                     username: Optional[str] = None, ssh_private_key: Optional[str] = None,
                      description: Optional[str] = None) -> bool:
         """
         Update server information.
@@ -180,7 +180,7 @@ class ServerManager:
             ip_address: New IP address
             port: New SSH port
             username: New SSH username
-            ssh_key_path: New SSH key path
+            ssh_private_key: New SSH private key content
             description: New description
             
         Returns:
@@ -203,9 +203,9 @@ class ServerManager:
             if username is not None:
                 updates.append("username = %s")
                 params.append(username)
-            if ssh_key_path is not None:
-                updates.append("ssh_key_path = %s")
-                params.append(ssh_key_path)
+            if ssh_private_key is not None:
+                updates.append("ssh_private_key = %s")
+                params.append(ssh_private_key)
             if description is not None:
                 updates.append("description = %s")
                 params.append(description)

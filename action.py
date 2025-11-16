@@ -228,7 +228,7 @@ class ActionManager:
     # ===== SSH Command Execution =====
     
     def execute_ssh_command(self, host: str, port: int, username: str, 
-                           ssh_key_path: str, command: str, 
+                           ssh_private_key: str, command: str, 
                            timeout: int = 30) -> ExecutionResult:
         """
         Execute a command via SSH using paramiko.
@@ -237,7 +237,7 @@ class ActionManager:
             host: Server IP address
             port: SSH port
             username: SSH username
-            ssh_key_path: Path to SSH private key
+            ssh_private_key: SSH private key content (PEM format text)
             command: Command to execute
             timeout: Timeout in seconds
             
@@ -245,6 +245,7 @@ class ActionManager:
             ExecutionResult with output or error
         """
         import time
+        from io import StringIO
         start_time = time.time()
         
         ssh_client = None
@@ -253,14 +254,17 @@ class ActionManager:
             ssh_client = paramiko.SSHClient()
             ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
             
-            # Load private key
+            # Load private key from string
             try:
-                private_key = paramiko.RSAKey.from_private_key_file(ssh_key_path)
+                key_file = StringIO(ssh_private_key)
+                private_key = paramiko.RSAKey.from_private_key(key_file)
             except:
                 try:
-                    private_key = paramiko.Ed25519Key.from_private_key_file(ssh_key_path)
+                    key_file = StringIO(ssh_private_key)
+                    private_key = paramiko.Ed25519Key.from_private_key(key_file)
                 except:
-                    private_key = paramiko.ECDSAKey.from_private_key_file(ssh_key_path)
+                    key_file = StringIO(ssh_private_key)
+                    private_key = paramiko.ECDSAKey.from_private_key(key_file)
             
             # Connect
             ssh_client.connect(
@@ -432,7 +436,7 @@ class ActionManager:
         
         Args:
             action_id: Action ID to execute
-            server_info: Server connection info (ip_address, port, username, ssh_key_path)
+            server_info: Server connection info (ip_address, port, username, ssh_private_key)
             params: Parameters for template substitution (e.g., service_name, ip_address)
             
         Returns:
@@ -506,7 +510,7 @@ class ActionManager:
                 host=server_info['ip_address'],
                 port=server_info.get('port', 22),
                 username=server_info['username'],
-                ssh_key_path=server_info['ssh_key_path'],
+                ssh_private_key=server_info['ssh_private_key'],
                 command=command,
                 timeout=timeout
             )
