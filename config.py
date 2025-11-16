@@ -34,7 +34,11 @@ class Config:
         self._configs['APP_INIT_SECRET'] = os.getenv('APP_INIT_SECRET', uuid4().hex)
         self._configs['APP_LOG_LEVEL'] = os.getenv('APP_LOG_LEVEL', 'INFO')
         self._configs['APP_PORT'] = os.getenv('APP_PORT', '8080')
-    
+
+        # OpenAI configs
+        self._configs['OPENAI_API_KEY'] = os.getenv('OPENAI_API_KEY', '')
+        self._configs['OPENAI_API_BASE'] = os.getenv('OPENAI_API_BASE', 'https://api.openai.com/v1/')
+
     def _load_env_variables(self):
         """Load all environment variables into the config (override predefined if set)."""
         for key, value in os.environ.items():

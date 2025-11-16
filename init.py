@@ -4,10 +4,12 @@ import jsonlog
 import bcrypt
 import os
 from pathlib import Path
+from openai_client import OpenAIClient
 
 logger = jsonlog.setup_logger("init")
 
 mysql_config = env_config.Config(group="MYSQL")
+
 
 def check_database_connection() -> db.DatabaseClient:
     """Check if the database connection can be established."""
@@ -192,6 +194,9 @@ def insert_default_data(db_client: db.DatabaseClient, init_secret: str = ""):
         affected_rows = db_client.execute_many(settings_query, settings_data)
         logger.info(f"Inserted {affected_rows} application settings")
         
+        # Fetch available AI models from OpenAI API
+        ai_models = OpenAIClient.fetch_available_models()
+        
         # Insert predefined setting options
         options_query = "INSERT IGNORE INTO setting_options (setting_id, option_value, option_label, is_default, display_order) VALUES (%s, %s, %s, %s, %s)"
         options_data = [
@@ -205,20 +210,18 @@ def insert_default_data(db_client: db.DatabaseClient, init_secret: str = ""):
             (2, 'Dark', 'Dark (Tối)', 0, 2),
             (2, 'Auto', 'Auto (Tự động)', 0, 3),
             
-            (3, 'gpt-4o-mini', 'GPT-4o Mini (OpenAI)', 1, 1),
-            (3, 'gpt-4o', 'GPT-4o (OpenAI)', 0, 2),
-            (3, 'gemini-pro', 'Gemini Pro (Google)', 0, 3),
-            (3, 'gemini-flash', 'Gemini Flash (Google)', 0, 4),
-            (3, 'claude-3-opus', 'Claude 3 Opus (Anthropic)', 0, 5),
-            (3, 'claude-3-sonnet', 'Claude 3 Sonnet (Anthropic)', 0, 6),
-            
             (4, 'INFO', 'INFO (Thông tin)', 0, 1),
             (4, 'WARNING', 'WARNING (Cảnh báo)', 1, 2),
             (4, 'ERROR', 'ERROR (Lỗi)', 0, 3),
             (4, 'CRITICAL', 'CRITICAL (Nghiêm trọng)', 0, 4),
         ]
+        
+        # Add dynamically fetched AI models to options_data
+        for model_value, model_label, is_default, display_order in ai_models:
+            options_data.append((3, model_value, model_label, 1 if is_default else 0, display_order))
+        
         affected_rows = db_client.execute_many(options_query, options_data)
-        logger.info(f"Inserted {affected_rows} setting options")
+        logger.info(f"Inserted {affected_rows} setting options (including {len(ai_models)} AI models)")
         
         logger.info("Default data inserted successfully")
         
