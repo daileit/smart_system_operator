@@ -4,7 +4,6 @@ import jsonlog
 import bcrypt
 import os
 from pathlib import Path
-from openai_client import OpenAIClient
 
 logger = jsonlog.setup_logger("init")
 
@@ -184,44 +183,39 @@ def insert_default_data(db_client: db.DatabaseClient, init_secret: str = ""):
         logger.info(f"Assigned admin role to admin user")
         
         # Insert default application settings
-        settings_query = "INSERT IGNORE INTO app_settings (setting_id, setting_name, setting_value, setting_group, description) VALUES (%s, %s, %s, %s, %s)"
+        settings_query = "INSERT IGNORE INTO app_settings (setting_id, setting_name, setting_value, setting_group, description, has_options) VALUES (%s, %s, %s, %s, %s, %s)"
         settings_data = [
-            (1, 'APP_FONT', 'Inter', 'UI', 'Font chữ chính của ứng dụng'),
-            (2, 'APP_THEME', 'Light', 'UI', 'Giao diện Sáng (Light) hoặc Tối (Dark)'),
-            (3, 'AI_MODEL', 'gpt-4o-mini', 'AI', 'Mô hình AI sử dụng'),
-            (4, 'ALERT_SEVERITY_THRESHOLD', 'WARNING', 'System', 'Ngưỡng cảnh báo tối thiểu để hiển thị')
+            (1, 'APP_FONT', None, 'UI', 'Font chữ chính của ứng dụng', 1),  # has_options=1, value from options
+            (2, 'APP_THEME', None, 'UI', 'Giao diện Sáng (Light) hoặc Tối (Dark)', 1),  # has_options=1
+            (3, 'ALERT_SEVERITY_THRESHOLD', None, 'System', 'Ngưỡng cảnh báo tối thiểu để hiển thị', 1),  # has_options=1
         ]
         affected_rows = db_client.execute_many(settings_query, settings_data)
         logger.info(f"Inserted {affected_rows} application settings")
         
-        # Fetch available AI models from OpenAI API
-        ai_models = OpenAIClient.fetch_available_models()
-        
         # Insert predefined setting options
-        options_query = "INSERT IGNORE INTO setting_options (setting_id, option_value, option_label, is_default, display_order) VALUES (%s, %s, %s, %s, %s)"
+        options_query = "INSERT IGNORE INTO setting_options (setting_id, option_value, option_label, is_selected, display_order) VALUES (%s, %s, %s, %s, %s)"
         options_data = [
-            (1, 'Inter', 'Inter (Default)', 1, 1),
+            # Font options (setting_id=1)
+            (1, 'Inter', 'Inter (Default)', 1, 1),  # is_selected=1 (default)
             (1, 'Roboto', 'Roboto', 0, 2),
             (1, 'Open Sans', 'Open Sans', 0, 3),
             (1, 'Lato', 'Lato', 0, 4),
             (1, 'Poppins', 'Poppins', 0, 5),
             
-            (2, 'Light', 'Light (Sáng)', 1, 1),
+            # Theme options (setting_id=2)
+            (2, 'Light', 'Light (Sáng)', 1, 1),  # is_selected=1 (default)
             (2, 'Dark', 'Dark (Tối)', 0, 2),
             (2, 'Auto', 'Auto (Tự động)', 0, 3),
             
-            (4, 'INFO', 'INFO (Thông tin)', 0, 1),
-            (4, 'WARNING', 'WARNING (Cảnh báo)', 1, 2),
-            (4, 'ERROR', 'ERROR (Lỗi)', 0, 3),
-            (4, 'CRITICAL', 'CRITICAL (Nghiêm trọng)', 0, 4),
+            # Alert severity options (setting_id=3)
+            (3, 'INFO', 'INFO (Thông tin)', 0, 1),
+            (3, 'WARNING', 'WARNING (Cảnh báo)', 1, 2),  # is_selected=1 (default)
+            (3, 'ERROR', 'ERROR (Lỗi)', 0, 3),
+            (3, 'CRITICAL', 'CRITICAL (Nghiêm trọng)', 0, 4),
         ]
         
-        # Add dynamically fetched AI models to options_data
-        for model_value, model_label, is_default, display_order in ai_models:
-            options_data.append((3, model_value, model_label, 1 if is_default else 0, display_order))
-        
         affected_rows = db_client.execute_many(options_query, options_data)
-        logger.info(f"Inserted {affected_rows} setting options (including {len(ai_models)} AI models)")
+        logger.info(f"Inserted {affected_rows} setting options")
         
         logger.info("Default data inserted successfully")
         

@@ -59,15 +59,18 @@ class OpenAIClient:
         self.client = OpenAI(api_key=self.api_key, base_url=self.base_url)
         self.logger = logger
         
+        # Initialize system prompt
+        self._init_system_prompt()
+        
         logger.info(f"OpenAI client initialized with base_url: {self.base_url}, model: {self.model}")
     
     @staticmethod
     def fetch_available_models(api_key: Optional[str] = None, base_url: Optional[str] = None) -> List[Tuple[str, str, bool, int]]:
         """
-        Fetch available models from OpenAI API.
+        Fetch available models from OpenAI-compatible API endpoint.
         
         Args:
-            api_key: OpenAI API key (defaults to env config)
+            api_key: API key (defaults to env config)
             base_url: API base URL (defaults to env config)
             
         Returns:
@@ -85,65 +88,78 @@ class OpenAIClient:
             if not api_key:
                 logger.warning("OPENAI_API_KEY not configured, using fallback model list")
                 return [
-                    ('gpt-4o-mini', 'GPT-4o Mini (OpenAI)', True, 1),
-                    ('gpt-4o', 'GPT-4o (OpenAI)', False, 2),
+                    ('gpt-4o-mini', 'GPT-4o Mini', True, 1),
+                    ('gpt-4o', 'GPT-4o', False, 2),
                 ]
             
             # Initialize client with base_url
             client = OpenAI(api_key=api_key, base_url=base_url)
             models_response = client.models.list()
             
-            # Filter for GPT models only (exclude embedding, tts, whisper, etc.)
-            gpt_models = []
-            display_order = 1
-            
             # Determine default model from config
             default_model = openai_config.get("OPENAI_MODEL", "gpt-4o-mini")
             
+            # Detect provider from base_url for better labeling
+            provider = "Unknown"
+            if 'openai.com' in base_url.lower():
+                provider = "OpenAI"
+            elif 'azure' in base_url.lower():
+                provider = "Azure OpenAI"
+            elif 'localhost' in base_url.lower() or '127.0.0.1' in base_url:
+                if '11434' in base_url:
+                    provider = "Ollama"
+                elif '1234' in base_url:
+                    provider = "LM Studio"
+                else:
+                    provider = "Local"
+            
+            # Collect all available models (no filtering)
+            available_models = []
+            display_order = 1
+            
             for model in models_response.data:
                 model_id = model.id
-                # Include only GPT chat models
-                if any(prefix in model_id for prefix in ['gpt-4', 'gpt-3.5']):
-                    # Set default based on config
-                    is_default = model_id == default_model
-                    
-                    # Create friendly label
-                    label = model_id.upper().replace('-', ' ').replace('_', ' ')
-                    
-                    # Add API provider info based on base_url
-                    if 'azure' in base_url.lower():
-                        label = f"{label} (Azure OpenAI)"
-                    else:
-                        label = f"{label} (OpenAI)"
-                    
-                    gpt_models.append((model_id, label, is_default, display_order))
-                    display_order += 1
+                
+                # Set default based on config
+                is_default = model_id == default_model
+                
+                # Create friendly label from model ID
+                # Keep original ID for display but make it more readable
+                label = model_id.replace('_', ' ').replace('-', ' ').title()
+                
+                # Add provider suffix if not local
+                if provider != "Unknown" and provider != "Local":
+                    label = f"{label} ({provider})"
+                
+                available_models.append((model_id, label, is_default, display_order))
+                display_order += 1
             
-            # Sort by model name (gpt-4 first, then gpt-3.5)
-            gpt_models.sort(key=lambda x: (0 if 'gpt-4' in x[0] else 1, x[0]))
+            # Sort models: default first, then alphabetically
+            available_models.sort(key=lambda x: (not x[2], x[0].lower()))
             
             # Re-assign display order after sorting
-            gpt_models = [(m[0], m[1], m[2], i+1) for i, m in enumerate(gpt_models)]
+            available_models = [(m[0], m[1], m[2], i+1) for i, m in enumerate(available_models)]
             
-            if not gpt_models:
-                logger.warning("No GPT models found, using fallback model list")
+            if not available_models:
+                logger.warning(f"No models found from {base_url}, using fallback model list")
                 return [
-                    ('gpt-4o-mini', 'GPT-4o Mini (OpenAI)', True, 1),
-                    ('gpt-4o', 'GPT-4o (OpenAI)', False, 2),
+                    ('gpt-4o-mini', 'GPT-4o Mini', True, 1),
+                    ('gpt-4o', 'GPT-4o', False, 2),
                 ]
             
-            logger.info(f"Fetched {len(gpt_models)} available models from {base_url}")
-            return gpt_models
+            logger.info(f"Fetched {len(available_models)} available models from {base_url} ({provider})")
+            return available_models
             
         except Exception as e:
             logger.error(f"Error fetching models from {base_url}: {e}")
             logger.warning("Using fallback model list")
             return [
-                ('gpt-4o-mini', 'GPT-4o Mini (OpenAI)', True, 1),
-                ('gpt-4o', 'GPT-4o (OpenAI)', False, 2),
+                ('gpt-4o-mini', 'GPT-4o Mini', True, 1),
+                ('gpt-4o', 'GPT-4o', False, 2),
             ]
-        
-        # System prompt for server management AI
+    
+    def _init_system_prompt(self):
+        """Initialize the system prompt for server management AI."""
         self.system_prompt = """You are an expert server operations AI assistant for the Smart System Operator platform.
 
 Your role is to analyze server metrics, execution logs, and system status to recommend appropriate actions.
