@@ -46,7 +46,7 @@ CREATE TABLE IF NOT EXISTS http_configs (
     http_url VARCHAR(500) NOT NULL,
     http_headers JSON,
     http_body TEXT,
-    json parameters JSON,
+    parameters JSON,
     timeout_seconds INT DEFAULT 10,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (action_id) REFERENCES actions(id) ON DELETE CASCADE,
