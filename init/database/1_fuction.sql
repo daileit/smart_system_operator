@@ -87,3 +87,49 @@ CREATE TABLE IF NOT EXISTS execution_logs (
     INDEX idx_execution_type (execution_type),
     INDEX idx_status_date (status, executed_at)
 );
+
+-- ===== COMMAND EXECUTE ACTIONS =====
+INSERT IGNORE INTO actions (action_name, action_type, description) VALUES
+('reboot_system', 'command_execute', 'Reboot the server system immediately. Use when system is unresponsive or after critical updates. HIGH RISK - causes downtime.'),
+('restart_service', 'command_execute', 'Restart a specific systemd service. Useful for applying configuration changes or recovering from service failures. MEDIUM RISK - brief service interruption.'),
+('stop_service', 'command_execute', 'Stop a specific systemd service. Use to halt misbehaving services or for maintenance. MEDIUM RISK - service becomes unavailable.'),
+('start_service', 'command_execute', 'Start a specific systemd service. Use to bring services online after maintenance or failures. LOW RISK - restores service availability.'),
+('block_ip_firewalld', 'command_execute', 'Block a specific IP address using firewalld. Use to prevent access from malicious or problematic IPs. MEDIUM RISK - may block legitimate traffic.'),
+('unblock_ip_firewalld', 'command_execute', 'Unblock a previously blocked IP address using firewalld. Use to restore access after resolving issues. LOW RISK - restores access.'),
+('kill_process', 'command_execute', 'Terminate processes matching a specific name pattern. Use to stop runaway or problematic processes. HIGH RISK - may kill critical processes.'),
+('cleanup_temp_files', 'command_execute', 'Remove temporary files older than specified days. Use to free up disk space and maintain system cleanliness. LOW RISK - removes old temp files.');
+
+INSERT IGNORE INTO command_configs (action_id, command_template, timeout_seconds) VALUES
+((SELECT id FROM actions WHERE action_name = 'reboot_system'), 'sudo reboot', 60),
+((SELECT id FROM actions WHERE action_name = 'restart_service'), 'sudo systemctl restart ${service_name}', 30),
+((SELECT id FROM actions WHERE action_name = 'stop_service'), 'sudo systemctl stop ${service_name}', 30),
+((SELECT id FROM actions WHERE action_name = 'start_service'), 'sudo systemctl start ${service_name}', 30),
+((SELECT id FROM actions WHERE action_name = 'block_ip_firewalld'), 'sudo firewall-cmd --permanent --add-rich-rule="rule family=ipv4 source address=${ip_address} drop" && sudo firewall-cmd --reload', 15),
+((SELECT id FROM actions WHERE action_name = 'unblock_ip_firewalld'), 'sudo firewall-cmd --permanent --remove-rich-rule="rule family=ipv4 source address=${ip_address} drop" && sudo firewall-cmd --reload', 15),
+((SELECT id FROM actions WHERE action_name = 'kill_process'), 'sudo pkill -f ${process_name}', 10),
+((SELECT id FROM actions WHERE action_name = 'cleanup_temp_files'), 'sudo find /tmp -type f -mtime +${days} -delete', 20);
+
+-- ===== COMMAND GET ACTIONS =====
+INSERT IGNORE INTO actions (action_name, action_type, description) VALUES
+('get_service_status', 'command_get', 'Check the current status of a systemd service including active state and recent logs. Safe information gathering.'),
+('get_disk_usage', 'command_get', 'Get disk space usage for a specific path showing used, available, and percentage. Safe system monitoring.'),
+('get_cpu_usage', 'command_get', 'Get current CPU usage percentage across all cores. Safe performance monitoring.'),
+('get_memory_usage', 'command_get', 'Get current memory usage percentage including used and available memory. Safe resource monitoring.'),
+('get_process_list', 'command_get', 'List all running processes matching a specific name pattern with resource usage. Safe process monitoring.'),
+('get_network_connections', 'command_get', 'Show active network connections on a specific port including connection states. Safe network monitoring.'),
+('get_system_load', 'command_get', 'Get system load averages for 1, 5, and 15 minute intervals. Safe system health check.'),
+('get_uptime', 'command_get', 'Get system uptime and boot time information. Safe system information gathering.'),
+('get_failed_services', 'command_get', 'List all systemd services that are in failed state. Safe service health monitoring.'),
+('get_top_processes', 'command_get', 'Get top CPU and memory consuming processes. Safe resource usage analysis.');
+
+INSERT IGNORE INTO command_configs (action_id, command_template, timeout_seconds) VALUES
+((SELECT id FROM actions WHERE action_name = 'get_service_status'), 'sudo systemctl status ${service_name} --no-pager', 10),
+((SELECT id FROM actions WHERE action_name = 'get_disk_usage'), 'df -h ${path}', 5),
+((SELECT id FROM actions WHERE action_name = 'get_cpu_usage'), 'top -bn1 | grep "Cpu(s)" | sed "s/.*, *\\([0-9.]*\\)%* id.*/\\1/" | awk \'{print 100 - $1"%"}\'', 5),
+((SELECT id FROM actions WHERE action_name = 'get_memory_usage'), 'free -m | awk \'NR==2{printf "Memory Usage: %s/%sMB (%.2f%%)", $3,$2,$3*100/$2 }\'', 5),
+((SELECT id FROM actions WHERE action_name = 'get_process_list'), 'ps aux | grep ${process_name} | grep -v grep', 5),
+((SELECT id FROM actions WHERE action_name = 'get_network_connections'), 'ss -tuln | grep ${port}', 5),
+((SELECT id FROM actions WHERE action_name = 'get_system_load'), 'uptime', 5),
+((SELECT id FROM actions WHERE action_name = 'get_uptime'), 'uptime -p && uptime -s', 5),
+((SELECT id FROM actions WHERE action_name = 'get_failed_services'), 'sudo systemctl list-units --state=failed --no-pager', 10),
+((SELECT id FROM actions WHERE action_name = 'get_top_processes'), 'ps aux --sort=-%cpu | head -10', 5);
