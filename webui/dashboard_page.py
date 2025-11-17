@@ -398,9 +398,9 @@ def dashboard_page():
                 with ui.menu():
                     ui.menu_item(f'{username}', lambda: None).props('disable')
                     ui.separator()
-                    ui.menu_item('Home', lambda: ui.navigate.to('/'), icon='home')
-                    ui.menu_item('Settings', lambda: ui.navigate.to('/settings'), icon='settings')
-                    ui.menu_item('Logout', lambda: (user_session.clear(), ui.navigate.to('/login')), icon='logout')
+                    ui.menu_item('Home', lambda: ui.navigate.to('/'))
+                    ui.menu_item('Settings', lambda: ui.navigate.to('/settings'))
+                    ui.menu_item('Logout', lambda: (user_session.clear(), ui.navigate.to('/login')))
     
     # Three-column layout
     with ui.row().classes('w-full h-[calc(100vh-64px)] gap-0'):
