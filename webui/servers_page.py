@@ -463,7 +463,7 @@ def servers_page():
                 # Update actions
                 server_manager.detach_all_actions(server_id)
                 if actions_to_assign:
-                    server_manager.attach_actions_with_config(server_id, actions_to_assign)
+                    server_manager.attach_actions(server_id, actions_config=actions_to_assign)
                 
                 auto_count = sum(1 for a in actions_to_assign if a['automatic'])
                 ui.notify(
