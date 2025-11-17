@@ -112,7 +112,7 @@ def dashboard_page():
         if not redis_client:
             return None
         
-        key = f"server_metrics:{server_id}"
+        key = f"smart_system:server_metrics:{server_id}"
         metrics_list = redis_client.get_json_list(key)
         
         if metrics_list and len(metrics_list) > 0:
