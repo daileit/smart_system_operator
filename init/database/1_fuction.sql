@@ -71,10 +71,10 @@ CREATE TABLE IF NOT EXISTS server_allowed_actions (
 CREATE TABLE IF NOT EXISTS execution_logs (
     id INT PRIMARY KEY AUTO_INCREMENT,
     server_id INT NOT NULL,
-    action_id INT NOT NULL,
-    execution_type ENUM('executed', 'recommended') NOT NULL, -- executed = actually ran, recommended = AI suggested only
+    action_id INT NULL, -- NULL for observation-only analysis (no action recommended)
+    execution_type ENUM('executed', 'recommended', 'analyzed') NOT NULL, -- executed = actually ran, recommended = AI suggested action, analyzed = observation only
     recommendation_id INT NULL, -- For executions: references the recommendation that triggered it. For recommendations: NULL
-    ai_reasoning TEXT, -- AI's reasoning for this action (only for recommendations)
+    ai_reasoning TEXT, -- AI's reasoning for this action (only for recommendations/analyzed)
     execution_details TEXT, -- Command/request details (only for recommendations)
     execution_result TEXT, -- Response/output (only for executions)
     status ENUM('success', 'failed', 'timeout', 'recommended') NOT NULL,
@@ -82,7 +82,7 @@ CREATE TABLE IF NOT EXISTS execution_logs (
     execution_time DECIMAL(8,3), -- NULL for recommendations
     executed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (server_id) REFERENCES servers(id),
-    FOREIGN KEY (action_id) REFERENCES actions(id),
+    FOREIGN KEY (action_id) REFERENCES actions(id) ON DELETE CASCADE,
     FOREIGN KEY (recommendation_id) REFERENCES execution_logs(id) ON DELETE SET NULL,
     INDEX idx_server_date (server_id, executed_at),
     INDEX idx_action_date (action_id, executed_at),
