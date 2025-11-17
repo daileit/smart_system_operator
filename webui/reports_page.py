@@ -991,7 +991,7 @@ def reports_page():
                     ui.menu_item('Dashboard', on_click=lambda: ui.navigate.to('/dashboard'))
                     ui.menu_item('Servers', on_click=lambda: ui.navigate.to('/servers'))
                     ui.menu_item('Settings', on_click=lambda: ui.navigate.to('/settings'))
-                    ui.menu_separator()
+                    ui.separator()
                     ui.menu_item('Logout', on_click=lambda: (user_session.clear(), ui.navigate.to('/login')))
     
     # Layout
