@@ -65,10 +65,12 @@ class RedisClient:
         json_value = self.client.get(key)
         return json.loads(json_value) if json_value else None
 
-    def set_json_list(self, key, values):
+    def set_json_list(self, key, values, ttl=None):
         # Serialize the list of JSON objects and set it in Redis with datetime support
         json_values = json.dumps(values, cls=DateTimeEncoder)
         self.client.set(key, json_values)
+        if ttl:
+            self.client.expire(key, ttl)
 
     def get_json_list(self, key):
         # Retrieve and deserialize the list of JSON objects from Redis

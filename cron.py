@@ -21,7 +21,7 @@ logger = jsonlog.setup_logger("cron")
 
 def _get_metrics_key(server_id: int) -> str:
     """Get Redis key for server metrics queue."""
-    return f"server_metrics:{server_id}"
+    return f"smart_system:server_metrics:{server_id}"
 
 
 class MetricsCrawler:
@@ -122,7 +122,7 @@ class MetricsCrawler:
                         key=key,
                         value=metrics,
                         limit=100,
-                        ttl=86400,
+                        ttl=600,
                         position=0
                     )
                     collected += 1
@@ -443,14 +443,14 @@ class AIAnalyzer:
                 if len(current_metrics) > 100:
                     current_metrics = current_metrics[:100]
                 
-                self.redis.set_json_list(key, current_metrics)
+                self.redis.set_json_list(key, current_metrics, ttl=600)
             
             # Remove consumed metrics
             key = _get_metrics_key(server_id)
             remaining = (self.redis.get_json_list(key) or [])[self.max_metrics_per_analysis:]
             
             if remaining:
-                self.redis.set_json_list(key, remaining)
+                self.redis.set_json_list(key, remaining, ttl=600)
             else:
                 self.redis.delete_key(key)
             
