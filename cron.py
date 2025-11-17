@@ -44,7 +44,7 @@ class MetricsCrawler:
         ]
     
     def _get_server_actions_cached(self, server_id: int) -> List[Dict[str, Any]]:
-        """Get server's allowed actions with Redis caching (600s TTL)."""
+        """Get server's allowed actions with Redis caching (300s TTL)."""
         cache_key = f"cache:server_actions:{server_id}"
         
         # Try to get from Redis cache
@@ -62,9 +62,9 @@ class MetricsCrawler:
         # Filter for command_get actions only
         actions = [a for a in actions if a.get('action_type') == 'command_get']
         
-        # Store in Redis with 600s TTL
-        self.redis.set_json(cache_key, actions, ttl=600)
-        self.logger.debug(f"Server actions cached for server_id={server_id}: {len(actions)} actions")
+        # Store in Redis with 300s TTL (only on cache miss)
+        self.redis.set_json(cache_key, actions, ttl=300)
+        self.logger.debug(f"Server actions cached for server_id={server_id}: {len(actions)} actions, expires in 300s")
         
         return actions
     
@@ -196,7 +196,6 @@ class AIAnalyzer:
         self.max_metrics_per_analysis = 5
     
     def _get_all_get_actions_cached(self) -> List[Dict[str, Any]]:
-        """Get all command_get actions with Redis caching (600s TTL)."""
         cache_key = "cache:all_get_actions"
         
         # Try to get from Redis cache
@@ -212,14 +211,14 @@ class AIAnalyzer:
             active_only=True
         )
         
-        # Store in Redis with 600s TTL
-        self.redis.set_json(cache_key, actions, ttl=600)
-        self.logger.debug(f"All actions cached: {len(actions)} actions")
+        # Store in Redis with 300s TTL (only on cache miss)
+        self.redis.set_json(cache_key, actions, ttl=300)
+        self.logger.debug(f"All actions cached: {len(actions)} actions, expires in 300s")
         
         return actions
     
     def _get_server_cached(self, server_id: int) -> Optional[Dict[str, Any]]:
-        """Get server info with Redis caching (600s TTL)."""
+        """Get server info with Redis caching (300s TTL)."""
         cache_key = f"cache:server_info:{server_id}"
         
         # Try to get from Redis cache
@@ -233,9 +232,8 @@ class AIAnalyzer:
         server_data = self.server_manager.get_server(server_id, include_actions=True)
         
         if server_data:
-            # Store in Redis with 600s TTL
-            self.redis.set_json(cache_key, server_data, ttl=600)
-            self.logger.debug(f"Server info cached for server_id={server_id}")
+            self.redis.set_json(cache_key, server_data, ttl=300)
+            self.logger.debug(f"Server info cached for server_id={server_id}, expires in 300s")
         
         return server_data
     
@@ -569,10 +567,9 @@ class CronManager:
     def __init__(self):
         # Load config
         app_config = env_config.Config(group="APP")
-        openai_config = env_config.Config(group="OPENAI")
         
-        self.crawler_delay = int(app_config.get("APP_CRAWLER_DELAY", "60"))
-        self.analyzer_delay = int(app_config.get("APP_MODEL_DELAY", "300"))
+        self.crawler_delay = int(app_config.get("APP_CRAWLER_DELAY", "30"))
+        self.analyzer_delay = int(app_config.get("APP_MODEL_DELAY", "120"))
         
         # Initialize clients
         self.db = DatabaseClient()

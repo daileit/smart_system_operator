@@ -70,22 +70,11 @@ class ServerManager:
             return None
     
     def get_server(self, server_id: int, include_actions: bool = False) -> Optional[Dict[str, Any]]:
-        """
-        Get server by ID.
-        
-        Args:
-            server_id: Server ID
-            include_actions: Whether to include allowed actions
-            
-        Returns:
-            Server dictionary with optional actions, None if not found
-        """
         try:
             server = self.db.fetch_one(
                 """
-                SELECT s.*, u.username as creator_username
+                SELECT s.name, s.ip_address, s.description, s.created_by, s.created_at,
                 FROM servers s
-                LEFT JOIN users u ON s.created_by = u.user_id
                 WHERE s.id = %s
                 """,
                 (server_id,)
