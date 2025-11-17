@@ -41,6 +41,7 @@ class Config:
         self._configs['OPENAI_API_KEY'] = os.getenv('OPENAI_API_KEY', '')
         self._configs['OPENAI_BASE_URL'] = os.getenv('OPENAI_BASE_URL', 'https://api.openai.com/v1')
         self._configs['OPENAI_MODEL'] = os.getenv('OPENAI_MODEL', 'gpt-4o')
+        self._configs['OPENAI_LANGUAGE'] = os.getenv('OPENAI_LANGUAGE', 'Vietnamese')
 
     def _load_env_variables(self):
         """Load all environment variables into the config (override predefined if set)."""

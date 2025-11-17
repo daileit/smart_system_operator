@@ -152,44 +152,44 @@ class OpenAIClient:
         """Initialize the system prompt for server management AI."""
         self.system_prompt = """You are an expert server operations AI assistant for the Smart System Operator platform.
 
-Your role is to analyze server metrics, execution logs, and system status to recommend appropriate actions.
+        Your role is to analyze server metrics, execution logs, and system status to recommend appropriate actions.
 
-IMPORTANT GUIDELINES:
-1. SAFETY FIRST: Never recommend high-risk actions (reboot, stop services) unless absolutely necessary
-2. EXPLAIN REASONING: Always provide clear, detailed reasoning for your recommendations
-3. CONFIDENCE LEVELS: Be honest about uncertainty - use confidence scores appropriately
-4. RISK ASSESSMENT: Classify every recommendation as low/medium/high risk
-5. APPROVAL REQUIREMENTS: High-risk actions should always require human approval
+        IMPORTANT GUIDELINES:
+        1. SAFETY FIRST: Never recommend high-risk actions (reboot, stop services) unless absolutely necessary
+        2. EXPLAIN REASONING: Always provide clear, detailed reasoning for your recommendations
+        3. CONFIDENCE LEVELS: Be honest about uncertainty - use confidence scores appropriately
+        4. RISK ASSESSMENT: Classify every recommendation as low/medium/high risk
+        5. LANGUAGE REQUIREMENTS: Analysis should be in 'Vietnamese'
 
-AVAILABLE ACTION TYPES:
-- command_execute: Modify server state (HIGH RISK - reboot, stop/start services, kill processes, etc.)
-- command_get: Gather information (LOW RISK - check status, get metrics, list processes, etc.)
-- http: Make HTTP API calls (MEDIUM RISK - depends on endpoint)
+        AVAILABLE ACTION TYPES:
+        - command_execute: Modify server state (HIGH RISK - reboot, stop/start services, kill processes, etc.)
+        - command_get: Gather information (LOW RISK - check status, get metrics, list processes, etc.)
+        - http: Make HTTP API calls (MEDIUM RISK - depends on endpoint)
 
-DECISION FRAMEWORK:
-1. Analyze the current server metrics and logs
-2. Identify potential issues or anomalies
-3. Recommend the least invasive actions first (prefer command_get over command_execute)
-4. Only recommend execute actions if monitoring shows clear problems
-5. Always explain what you're trying to achieve and why
+        DECISION FRAMEWORK:
+        1. Analyze the current server metrics and logs
+        2. Identify potential issues or anomalies
+        3. Recommend the least invasive actions first (prefer command_get over command_execute)
+        4. Only recommend execute actions if monitoring shows clear problems
+        5. Always explain what you're trying to achieve and why
 
-OUTPUT FORMAT:
-Return a JSON object with:
-{
-    "recommended_actions": [
+        OUTPUT FORMAT:
+        Return a JSON object with:
         {
-            "action_id": <int>,
-            "action_name": "<string>",
-            "priority": <int 1-10>,
-            "parameters": {<param_name>: <param_value>},
-            "reasoning": "<why this action>"
-        }
-    ],
-    "reasoning": "<overall reasoning>",
-    "confidence": <float 0.0-1.0>,
-    "risk_level": "<low|medium|high>",
-    "requires_approval": <boolean>
-}"""
+            "recommended_actions": [
+                {
+                    "action_id": <int>,
+                    "action_name": "<string>",
+                    "priority": <int 1-10>,
+                    "parameters": {<param_name>: <param_value>},
+                    "reasoning": "<why this action>"
+                }
+            ],
+            "reasoning": "<overall reasoning>",
+            "confidence": <float 0.0-1.0>,
+            "risk_level": "<low|medium|high>",
+            "requires_approval": <boolean>
+        }"""
     
     def analyze_server_metrics(self, 
                                server_info: Dict[str, Any],
@@ -223,22 +223,22 @@ Return a JSON object with:
             # Create user message
             user_message = f"""Analyze this server and recommend appropriate actions:
 
-SERVER INFORMATION:
-{json.dumps(server_info, indent=2, default=str)}
+            SERVER INFORMATION:
+            {json.dumps(server_info, indent=2, default=str)}
 
-AVAILABLE ACTIONS:
-{json.dumps(available_actions, indent=2, default=str)}
+            AVAILABLE ACTIONS:
+            {json.dumps(available_actions, indent=2, default=str)}
 
-RECENT EXECUTION LOGS (last 10):
-{json.dumps(execution_logs or [], indent=2, default=str)}
+            RECENT EXECUTION LOGS (last 10):
+            {json.dumps(execution_logs or [], indent=2, default=str)}
 
-SERVER STATISTICS:
-{json.dumps(server_statistics or {}, indent=2, default=str)}
+            SERVER STATISTICS:
+            {json.dumps(server_statistics or {}, indent=2, default=str)}
 
-CURRENT METRICS:
-{json.dumps(current_metrics or {}, indent=2, default=str)}
+            CURRENT METRICS:
+            {json.dumps(current_metrics or {}, indent=2, default=str)}
 
-Based on this information, recommend the most appropriate actions to take. Focus on monitoring first, only suggest interventions if there are clear issues."""
+            Based on this information, recommend the most appropriate actions to take. Focus on monitoring first, only suggest interventions if there are clear issues."""
             
             # Call OpenAI API
             response = self.client.chat.completions.create(
@@ -299,17 +299,17 @@ Based on this information, recommend the most appropriate actions to take. Focus
         try:
             user_message = f"""A specific issue has been reported for this server:
 
-ISSUE: {issue_description}
+            ISSUE: {issue_description}
 
-SERVER: {server_info.get('name')} ({server_info.get('ip_address')})
+            SERVER: {server_info.get('name')} ({server_info.get('ip_address')})
 
-AVAILABLE ACTIONS:
-{json.dumps(available_actions, indent=2, default=str)}
+            AVAILABLE ACTIONS:
+            {json.dumps(available_actions, indent=2, default=str)}
 
-RECENT LOGS:
-{json.dumps(execution_logs or [], indent=2, default=str)}
+            RECENT LOGS:
+            {json.dumps(execution_logs or [], indent=2, default=str)}
 
-Recommend actions to address this specific issue. Be specific about parameters needed for each action."""
+            Recommend actions to address this specific issue. Be specific about parameters needed for each action."""
             
             response = self.client.chat.completions.create(
                 model=self.model,
@@ -365,26 +365,26 @@ Recommend actions to address this specific issue. Be specific about parameters n
         try:
             user_message = f"""Validate if this action is safe to execute:
 
-SERVER: {server_info.get('name')} ({server_info.get('ip_address')})
+            SERVER: {server_info.get('name')} ({server_info.get('ip_address')})
 
-ACTION: {action_info.get('action_name')}
-TYPE: {action_info.get('action_type')}
-DESCRIPTION: {action_info.get('description')}
-COMMAND: {action_info.get('command_template', 'N/A')}
+            ACTION: {action_info.get('action_name')}
+            TYPE: {action_info.get('action_type')}
+            DESCRIPTION: {action_info.get('description')}
+            COMMAND: {action_info.get('command_template', 'N/A')}
 
-PARAMETERS: {json.dumps(parameters, indent=2)}
+            PARAMETERS: {json.dumps(parameters, indent=2)}
 
-RECENT EXECUTION HISTORY:
-{json.dumps(execution_logs or [], indent=2, default=str)}
+            RECENT EXECUTION HISTORY:
+            {json.dumps(execution_logs or [], indent=2, default=str)}
 
-Assess if this action is safe to execute now. Return JSON with:
-{{
-    "is_safe": <boolean>,
-    "risk_level": "<low|medium|high>",
-    "reasoning": "<detailed explanation>",
-    "warnings": ["<warning1>", "<warning2>"],
-    "prerequisites": ["<check1>", "<check2>"]
-}}"""
+            Assess if this action is safe to execute now. Return JSON with:
+            {{
+                "is_safe": <boolean>,
+                "risk_level": "<low|medium|high>",
+                "reasoning": "<detailed explanation>",
+                "warnings": ["<warning1>", "<warning2>"],
+                "prerequisites": ["<check1>", "<check2>"]
+            }}"""
             
             response = self.client.chat.completions.create(
                 model=self.model,
@@ -436,15 +436,15 @@ Assess if this action is safe to execute now. Return JSON with:
         try:
             user_message = f"""Explain this execution result in clear, concise terms:
 
-SERVER: {server_info.get('name')}
-ACTION: {action_info.get('action_name')}
-SUCCESS: {was_successful}
+            SERVER: {server_info.get('name')}
+            ACTION: {action_info.get('action_name')}
+            SUCCESS: {was_successful}
 
-EXECUTION OUTPUT:
-{execution_result}
+            EXECUTION OUTPUT:
+            {execution_result}
 
-Provide a brief, clear explanation of what happened and what it means. 
-Focus on actionable insights. If there are any warnings or issues, highlight them."""
+            Provide a brief, clear explanation of what happened and what it means. 
+            Focus on actionable insights. If there are any warnings or issues, highlight them."""
             
             response = self.client.chat.completions.create(
                 model=self.model,
@@ -486,25 +486,25 @@ Focus on actionable insights. If there are any warnings or issues, highlight the
             
             user_message = f"""Design a monitoring strategy for this server:
 
-SERVER: {server_info.get('name')} ({server_info.get('ip_address')})
-DESCRIPTION: {server_info.get('description', 'N/A')}
+            SERVER: {server_info.get('name')} ({server_info.get('ip_address')})
+            DESCRIPTION: {server_info.get('description', 'N/A')}
 
-AVAILABLE MONITORING ACTIONS:
-{json.dumps(monitoring_actions, indent=2, default=str)}
+            AVAILABLE MONITORING ACTIONS:
+            {json.dumps(monitoring_actions, indent=2, default=str)}
 
-Recommend which monitoring actions to run and how frequently. Return JSON with:
-{{
-    "monitoring_actions": [
-        {{
-            "action_id": <int>,
-            "action_name": "<string>",
-            "frequency": "<every_5min|every_15min|every_hour|daily>",
-            "priority": <int 1-10>,
-            "reasoning": "<why this check>"
-        }}
-    ],
-    "reasoning": "<overall strategy explanation>"
-}}"""
+            Recommend which monitoring actions to run and how frequently. Return JSON with:
+            {{
+                "monitoring_actions": [
+                    {{
+                        "action_id": <int>,
+                        "action_name": "<string>",
+                        "frequency": "<every_5min|every_15min|every_hour|daily>",
+                        "priority": <int 1-10>,
+                        "reasoning": "<why this check>"
+                    }}
+                ],
+                "reasoning": "<overall strategy explanation>"
+            }}"""
             
             response = self.client.chat.completions.create(
                 model=self.model,
@@ -585,13 +585,13 @@ Recommend which monitoring actions to run and how frequently. Return JSON with:
             # Build context message
             context = f"""Current server context:
 
-SERVER: {server_info.get('name')} ({server_info.get('ip_address')})
-DESCRIPTION: {server_info.get('description', 'N/A')}
+            SERVER: {server_info.get('name')} ({server_info.get('ip_address')})
+            DESCRIPTION: {server_info.get('description', 'N/A')}
 
-RECENT LOGS:
-{json.dumps(execution_logs or [], indent=2, default=str)}
+            RECENT LOGS:
+            {json.dumps(execution_logs or [], indent=2, default=str)}
 
-USER QUESTION: {user_question}"""
+            USER QUESTION: {user_question}"""
             
             messages.append({"role": "user", "content": context})
             
