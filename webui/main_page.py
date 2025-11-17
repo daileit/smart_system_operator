@@ -44,7 +44,7 @@ def main_page():
                     ui.menu_item(f'{full_name}', lambda: None).props('disable')
                     ui.menu_item(f'Role: {role_names}', lambda: None).props('disable')
                     ui.separator()
-                    ui.menu_item('Settings', lambda: ui.notify('Settings clicked'))
+                    ui.menu_item('Settings', lambda: ui.navigate.to('/settings'))
                     ui.separator()
                     ui.menu_item('Logout', lambda: (user_session.clear(), ui.navigate.to('/login')))
     
@@ -57,8 +57,8 @@ def main_page():
             # Navigation items based on permissions
             nav_items = [
                 {'id': 'dashboard', 'icon': 'dashboard', 'label': 'Dashboard', 'path': '/dashboard'},
-                {'id': 'users', 'icon': 'people', 'label': 'Users', 'path': '/users'},
                 {'id': 'servers', 'icon': 'dns', 'label': 'Servers', 'path': '/servers'},
+                {'id': 'users', 'icon': 'people', 'label': 'Users', 'path': '/users'},
                 {'id': 'reports', 'icon': 'assessment', 'label': 'Reports', 'path': '/reports'},
                 {'id': 'settings', 'icon': 'settings', 'label': 'Settings', 'path': '/settings'},
             ]

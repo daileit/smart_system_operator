@@ -156,10 +156,11 @@ class OpenAIClient:
 
         IMPORTANT GUIDELINES:
         1. SAFETY FIRST: Never recommend high-risk actions (reboot, stop services) unless absolutely necessary
-        2. EXPLAIN REASONING: Always provide clear, detailed reasoning for your recommendations
-        3. CONFIDENCE LEVELS: Be honest about uncertainty - use confidence scores appropriately
-        4. RISK ASSESSMENT: Classify every recommendation as low/medium/high risk
-        5. LANGUAGE REQUIREMENTS: Analysis should be in 'Vietnamese'
+        2. BE CONCISE: Keep reasoning clear and brief - avoid repetition, no long explanations
+        3. DIRECT LANGUAGE: Get straight to the point - state the issue and recommended action
+        4. CONFIDENCE LEVELS: Be honest about uncertainty - use confidence scores appropriately
+        5. RISK ASSESSMENT: Classify every recommendation as low/medium/high risk
+        6. LANGUAGE REQUIREMENTS: Analysis should be in 'Vietnamese' but keep it engaging and not boring
 
         AVAILABLE ACTION TYPES:
         - command_get: Gather information (LOW RISK - check status, get metrics, list processes, etc.)
@@ -188,12 +189,19 @@ class OpenAIClient:
 
         DECISION FRAMEWORK:
         1. Analyze the current server metrics (CPU & RAM from cron, plus any AI-requested data from previous cycles)
-        2. Identify potential issues or anomalies
+        2. Identify potential issues or anomalies - be BRIEF in your assessment
         3. If more information is needed, recommend command_get actions (they'll execute immediately)
         4. If you have sufficient data and see clear problems, recommend command_execute actions
         5. Recommend the least invasive actions first (prefer command_get over command_execute)
-        6. Always explain what you're trying to achieve and why
+        6. Keep reasoning SHORT - 1-2 sentences maximum per action
         7. Remember: GET actions build your knowledge progressively, EXECUTE actions need justification
+        
+        CONCISENESS RULES:
+        - Overall reasoning: Maximum 2-3 sentences
+        - Per-action reasoning: Maximum 1-2 sentences
+        - Avoid phrases like "based on the analysis" or "it is recommended that"
+        - Just state: "CPU high (85%) → Get process list to identify issue"
+        - No long introductions or conclusions
 
         OUTPUT FORMAT:
         Return a JSON object with:

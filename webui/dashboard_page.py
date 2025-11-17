@@ -164,16 +164,57 @@ def dashboard_page():
         
         logs = db_client.execute_query(
             """
-            SELECT ai_reasoning, execution_details, executed_at, status
+            SELECT ai_reasoning, execution_details, executed_at, status, action_id, execution_type
             FROM execution_logs
-            WHERE server_id = %s AND execution_type = 'recommended'
+            WHERE server_id = %s AND (execution_type = 'recommended' OR execution_type = 'executed')
             ORDER BY executed_at DESC
-            LIMIT 10
+            LIMIT 50
             """,
             (server_id,)
         )
         
         return logs or []
+    
+    def group_ai_recommendations(recommendations):
+        """Group recommendations with their executions."""
+        grouped = []
+        rec_map = {}
+        
+        for rec in recommendations:
+            rec_type = rec.get('execution_type')
+            action_id = rec.get('action_id')
+            timestamp = rec.get('executed_at')
+            
+            if rec_type == 'recommended':
+                # This is a recommendation
+                key = f"{action_id}_{timestamp}"
+                rec_map[key] = {
+                    'recommendation': rec,
+                    'executions': []
+                }
+                grouped.append(rec_map[key])
+            elif rec_type == 'executed':
+                # This is an execution - try to find its recommendation
+                # Look for recommendation within 5 minutes before this execution
+                found = False
+                for group in grouped:
+                    if group['recommendation'].get('action_id') == action_id:
+                        rec_time = group['recommendation'].get('executed_at')
+                        exec_time = timestamp
+                        # If execution is within 5 minutes of recommendation
+                        if rec_time and exec_time and (exec_time - rec_time).total_seconds() < 300:
+                            group['executions'].append(rec)
+                            found = True
+                            break
+                
+                # If no matching recommendation found, treat as standalone execution
+                if not found:
+                    grouped.append({
+                        'recommendation': None,
+                        'executions': [rec]
+                    })
+        
+        return grouped
     
     def select_server(server_id: int):
         """Handle server selection."""
@@ -350,7 +391,7 @@ def dashboard_page():
                         ui.label(f'Analyzing {server["name"]}').classes('text-caption text-white')
                     ui.icon('auto_awesome', size='lg').classes('text-white opacity-30')
             
-            # Get AI recommendations
+            # Get and group AI recommendations with executions
             recommendations = get_ai_recommendations(server_id)
             
             if not recommendations:
@@ -362,12 +403,26 @@ def dashboard_page():
                         ui.spinner(size='lg', color='purple')
                 return
             
+            # Group recommendations with their executions
+            grouped = group_ai_recommendations(recommendations)
+            
             # Display recommendations as chat-like messages
             with ui.scroll_area().classes('w-full h-[calc(100vh-300px)]'):
-                for idx, rec in enumerate(recommendations):
+                for idx, group in enumerate(grouped[:10]):  # Show last 10 groups
+                    rec = group.get('recommendation')
+                    executions = group.get('executions', [])
+                    
+                    # If no recommendation (standalone execution), use execution data
+                    if not rec and executions:
+                        rec = executions[0]
+                    
+                    if not rec:
+                        continue
+                    
                     timestamp = rec['executed_at'].strftime('%Y-%m-%d %H:%M:%S') if rec.get('executed_at') else 'Unknown'
                     reasoning = rec.get('ai_reasoning', 'No reasoning provided')
                     status = rec.get('status', 'unknown')
+                    execution_type = rec.get('execution_type', 'recommended')
                     
                     # Parse execution details
                     details = {}
@@ -389,17 +444,27 @@ def dashboard_page():
                     with ui.card().classes(f'w-full p-4 mb-3 {card_bg} {border_class} shadow-md hover:shadow-lg transition-all duration-300 {animation}'):
                         # Header row
                         with ui.row().classes('w-full justify-between items-start mb-2'):
-                            with ui.row().classes('items-center gap-2'):
-                                ui.icon('lightbulb', size='xs').classes('text-yellow-600')
-                                ui.label(action_name).classes('text-subtitle2 font-bold text-blue-900')
-                            with ui.row().classes('items-center gap-2'):
+                            with ui.column().classes('gap-1'):
+                                with ui.row().classes('items-center gap-2'):
+                                    icon_name = 'info' if action_type == 'command_get' else 'play_arrow' if action_type == 'command_execute' else 'http'
+                                    icon_color = 'text-purple-600' if action_type == 'command_get' else 'text-blue-600' if action_type == 'command_execute' else 'text-green-600'
+                                    ui.icon(icon_name, size='sm').classes(f'{icon_color} animate-pulse')
+                                    ui.label(action_name).classes('text-subtitle2 font-bold text-blue-900')
+                                ui.label(timestamp).classes('text-caption text-gray-500')
+                            with ui.row().classes('items-center gap-1'):
+                                # Action type badge
+                                if action_type == 'command_get':
+                                    ui.badge('GET', color='purple').classes('text-xs')
+                                elif action_type == 'command_execute':
+                                    ui.badge('EXEC', color='orange').classes('text-xs')
+                                elif action_type == 'http':
+                                    ui.badge('HTTP', color='green').classes('text-xs')
                                 # Priority badge
                                 priority_color = 'red' if priority >= 8 else 'orange' if priority >= 5 else 'green'
-                                ui.badge(f'P{priority}', color=priority_color).classes('px-2')
-                                ui.label(timestamp).classes('text-caption text-gray-600')
+                                ui.badge(f'P{priority}', color=priority_color).classes('text-xs')
                         
-                        # Reasoning text
-                        ui.label(reasoning).classes('text-body2 mb-2 whitespace-pre-wrap text-gray-700')
+                        # Reasoning text (concise)
+                        ui.label(reasoning).classes('text-body2 mb-2 text-gray-700')
                         
                         # Status and confidence badges
                         with ui.row().classes('gap-2 items-center'):
@@ -416,18 +481,69 @@ def dashboard_page():
                             confidence = details.get('confidence', 0)
                             if confidence:
                                 confidence_color = 'green' if confidence > 0.7 else 'orange' if confidence > 0.4 else 'red'
-                                ui.badge(f'Confidence: {confidence:.0%}', color=confidence_color).classes('px-3')
+                                ui.badge(f'{confidence:.0%}', color=confidence_color).classes('text-xs px-2')
+                            
+                            # Show execution count if any
+                            if executions:
+                                exec_count = len(executions)
+                                ui.badge(f'{exec_count} exec', color='indigo').classes('text-xs px-2 animate-pulse')
                         
-                        # Show parameters if available
+                        # Cool dropdown for executions
+                        if executions:
+                            with ui.expansion('🚀 Execution Results', icon='play_circle').classes('w-full mt-3 bg-gradient-to-r from-indigo-50 to-blue-50 rounded-lg border border-indigo-200'):
+                                with ui.column().classes('w-full gap-2 p-2'):
+                                    for exec_idx, execution in enumerate(executions):
+                                        exec_timestamp = execution['executed_at'].strftime('%H:%M:%S') if execution.get('executed_at') else 'Unknown'
+                                        exec_status = execution.get('status', 'unknown')
+                                        
+                                        # Parse execution details
+                                        exec_details = {}
+                                        try:
+                                            if execution.get('execution_details'):
+                                                exec_details = json.loads(execution['execution_details']) if isinstance(execution['execution_details'], str) else execution['execution_details']
+                                        except:
+                                            pass
+                                        
+                                        # Execution result card
+                                        exec_bg = 'bg-green-50' if exec_status == 'success' else 'bg-red-50' if exec_status == 'failed' else 'bg-gray-50'
+                                        exec_border = 'border-l-4 border-green-500' if exec_status == 'success' else 'border-l-4 border-red-500' if exec_status == 'failed' else 'border-l-4 border-gray-400'
+                                        
+                                        with ui.card().classes(f'w-full p-3 {exec_bg} {exec_border} shadow-sm'):
+                                            with ui.row().classes('w-full justify-between items-center mb-2'):
+                                                with ui.row().classes('items-center gap-2'):
+                                                    exec_icon = 'check_circle' if exec_status == 'success' else 'error' if exec_status == 'failed' else 'info'
+                                                    exec_icon_color = 'text-green-600' if exec_status == 'success' else 'text-red-600' if exec_status == 'failed' else 'text-gray-600'
+                                                    ui.icon(exec_icon, size='sm').classes(exec_icon_color)
+                                                    ui.label(f'Execution #{exec_idx + 1}').classes('text-subtitle2 font-bold')
+                                                ui.label(exec_timestamp).classes('text-caption text-gray-600')
+                                            
+                                            # Show execution result/output
+                                            exec_result = exec_details.get('execution_result') or execution.get('execution_result', 'No output')
+                                            if exec_result and len(exec_result) > 200:
+                                                # Truncate long output
+                                                with ui.expansion('📄 Output', icon='description').classes('w-full bg-white rounded'):
+                                                    ui.label(exec_result).classes('text-caption font-mono whitespace-pre-wrap')
+                                            else:
+                                                ui.label(exec_result[:200]).classes('text-caption font-mono whitespace-pre-wrap bg-white p-2 rounded')
+                                            
+                                            # Show execution time if available
+                                            exec_time = exec_details.get('execution_time')
+                                            if exec_time:
+                                                ui.label(f"⚡ {exec_time:.2f}s").classes('text-caption text-gray-500 mt-1')
+                        
+                        # Show parameters if available (collapsed by default)
                         if details.get('parameters'):
-                            with ui.expansion('⚙️ Parameters', icon='settings').classes('w-full mt-2 bg-white rounded'):
+                            with ui.expansion('⚙️ Parameters', icon='settings').classes('w-full mt-2 bg-white rounded border border-gray-200'):
                                 ui.json_editor({'content': {'json': details['parameters']}}).classes('w-full').props('read-only')
             
             # Footer with info
             with ui.row().classes('w-full justify-between items-center mt-4 p-2 bg-purple-100 rounded animate-fade-in'):
                 with ui.row().classes('items-center gap-2'):
                     ui.icon('info', size='xs').classes('text-purple-600 animate-pulse')
-                    ui.label(f'{len(recommendations)} recommendations found').classes('text-caption text-purple-800 font-bold')
+                    ui.label(f'{len(grouped)} AI decisions found').classes('text-caption text-purple-800 font-bold')
+                    total_execs = sum(len(g.get('executions', [])) for g in grouped)
+                    if total_execs > 0:
+                        ui.label(f'• {total_execs} executed').classes('text-caption text-indigo-700 font-bold')
                 ui.badge('AI', color='purple').classes('px-3 animate-pulse')
     
     def refresh_all():
