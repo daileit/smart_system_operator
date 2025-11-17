@@ -455,14 +455,14 @@ class ActionManager:
     
     # ===== Action Execution =====
     
-    def execute_action(self, action_id: int, server_info: Dict[str, Any],
+    def execute_action(self, action_id: int, server_id: int,
                       params: Optional[Dict[str, str]] = None) -> ExecutionResult:
         """
         Execute an action on a server.
         
         Args:
             action_id: Action ID to execute
-            server_info: Server connection info (ip_address, port, username, ssh_private_key)
+            server_id: Server ID (SSH credentials fetched separately)
             params: Parameters for template substitution (e.g., service_name, ip_address)
             
         Returns:
@@ -488,7 +488,18 @@ class ActionManager:
             
             # Execute based on action type
             if action_type in ('command_execute', 'command_get'):
-                return self._execute_command_action(action, server_info, params, timeout)
+                # Fetch SSH credentials separately (secure)
+                from servers import ServerManager
+                server_manager = ServerManager(self.db, self.redis)
+                ssh_credentials = server_manager.get_server_ssh_credentials(server_id)
+                
+                if not ssh_credentials:
+                    return ExecutionResult(
+                        success=False,
+                        error=f"Server {server_id} not found or no SSH credentials"
+                    )
+                
+                return self._execute_command_action(action, ssh_credentials, params, timeout)
             elif action_type == 'http':
                 return self._execute_http_action(action, params, timeout)
             else:
@@ -600,14 +611,14 @@ class ActionManager:
                 error=f"HTTP execution error: {str(e)}"
             )
     
-    def execute_action_by_name(self, action_name: str, server_info: Dict[str, Any],
+    def execute_action_by_name(self, action_name: str, server_id: int,
                               params: Optional[Dict[str, str]] = None) -> ExecutionResult:
         """
         Execute an action by name on a server.
         
         Args:
             action_name: Action name to execute
-            server_info: Server connection info
+            server_id: Server ID (SSH credentials fetched separately)
             params: Parameters for template substitution
             
         Returns:
@@ -621,7 +632,7 @@ class ActionManager:
                     error=f"Action '{action_name}' not found"
                 )
             
-            return self.execute_action(action['id'], server_info, params)
+            return self.execute_action(action['id'], server_id, params)
             
         except Exception as e:
             self.logger.error(f"Error executing action by name {action_name}: {e}")

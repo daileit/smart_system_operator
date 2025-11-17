@@ -132,6 +132,7 @@ class RedisClient:
         patterns = [
             f"{app_name}:servers:server_actions:{server_id}:*",
             f"{app_name}:servers:server_info:{server_id}",
+            f"{app_name}:servers:ssh_credentials:{server_id}",
         ]
         total_deleted = 0
         for pattern in patterns:

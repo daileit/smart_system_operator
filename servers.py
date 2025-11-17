@@ -101,10 +101,11 @@ class ServerManager:
                         self.logger.debug(f"Server info cache HIT for server_id={server_id}")
                         return cached_data
             
-            # Fetch from database
+            # Fetch from database (exclude ssh_private_key for security)
             server = self.db.fetch_one(
                 """
-                SELECT s.*
+                SELECT s.id, s.name, s.ip_address, s.port, s.username, 
+                       s.description, s.created_by, s.created_at, s.updated_at
                 FROM servers s
                 WHERE s.id = %s
                 """,
@@ -139,9 +140,12 @@ class ServerManager:
             List of server dictionaries
         """
         try:
+            # Exclude ssh_private_key for security
             servers = self.db.execute_query(
                 """
-                SELECT s.*, u.username as creator_username
+                SELECT s.id, s.name, s.ip_address, s.port, s.username, 
+                       s.description, s.created_by, s.created_at, s.updated_at,
+                       u.username as creator_username
                 FROM servers s
                 LEFT JOIN users u ON s.created_by = u.user_id
                 ORDER BY s.created_at DESC
@@ -460,8 +464,11 @@ class ServerManager:
             List of server dictionaries with automatic flag
         """
         try:
+            # Exclude ssh_private_key for security
             query = """
-                SELECT s.*, saa.automatic, saa.created_at as attached_at
+                SELECT s.id, s.name, s.ip_address, s.port, s.username, 
+                       s.description, s.created_by, s.created_at, s.updated_at,
+                       saa.automatic, saa.created_at as attached_at
                 FROM server_allowed_actions saa
                 JOIN servers s ON saa.server_id = s.id
                 WHERE saa.action_id = %s
@@ -499,4 +506,48 @@ class ServerManager:
         except Exception as e:
             self.logger.error(f"Error checking automatic flag: {e}")
             return False
+    
+    def get_server_ssh_credentials(self, server_id: int) -> Optional[Dict[str, Any]]:
+        """
+        Get server SSH credentials (for execution only).
+        This is the ONLY method that should fetch ssh_private_key.
+        
+        Args:
+            server_id: Server ID
+            
+        Returns:
+            Dictionary with ip_address, port, username, ssh_private_key
+        """
+        try:
+            # Check cache if Redis available
+            if self.redis:
+                cache_key = f"{self.app_name}:servers:ssh_credentials:{server_id}"
+                cached_data = self.redis.get_json(cache_key)
+                if cached_data:
+                    self.logger.debug(f"SSH credentials cache HIT for server_id={server_id}")
+                    return cached_data
+            
+            # Fetch SSH credentials from database
+            credentials = self.db.fetch_one(
+                """
+                SELECT ip_address, port, username, ssh_private_key
+                FROM servers
+                WHERE id = %s
+                """,
+                (server_id,)
+            )
+            
+            if not credentials:
+                return None
+            
+            # Cache the credentials with shorter TTL (2 minutes for security)
+            if self.redis:
+                self.redis.set_json(cache_key, credentials, ttl=120)
+                self.logger.debug(f"SSH credentials cached for server_id={server_id}, expires in 120s")
+            
+            return credentials
+            
+        except Exception as e:
+            self.logger.error(f"Error getting SSH credentials for server {server_id}: {e}")
+            return None
 
