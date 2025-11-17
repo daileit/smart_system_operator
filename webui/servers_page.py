@@ -342,10 +342,8 @@ def servers_page():
                             with ui.column().classes('items-end gap-1'):
                                 ui.label('Auto Execute').classes('text-caption text-grey-7')
                                 auto_switch = ui.switch(value=False).props('color=orange')
-                                if is_assigned and is_automatic:
-                                    auto_switch.enable()
-                                else:
-                                    auto_switch.disable()
+                                if is_assigned:
+                                    auto_switch.set_value(is_automatic)
                             
                             # Update action_configs on changes
                             # Use default parameters to capture current values in closure
@@ -392,10 +390,8 @@ def servers_page():
                             with ui.column().classes('items-end gap-1'):
                                 ui.label('Auto Execute').classes('text-caption text-grey-7')
                                 auto_switch = ui.switch(value=False).props('color=green')
-                                if is_assigned and is_automatic:
-                                    auto_switch.enable()
-                                else:
-                                    auto_switch.disable()
+                                if is_assigned:
+                                    auto_switch.set_value(is_automatic)
                             
                             # Update action_configs on changes
                             # Use default parameters to capture current values in closure
@@ -442,8 +438,9 @@ def servers_page():
                                 # Automatic toggle (only enabled if action is assigned)
                                 with ui.column().classes('items-end gap-1'):
                                     ui.label('Auto Execute').classes('text-caption text-grey-7')
-                                    auto_switch = ui.switch(value=is_automatic).props('color=blue')
-                                    auto_switch.set_enabled(is_assigned)
+                                    auto_switch = ui.switch(value=False).props('color=blue')
+                                    if is_assigned:
+                                        auto_switch.set_value(is_automatic)
                                 
                                 # Update action_configs on changes
                                 # Use default parameters to capture current values in closure
