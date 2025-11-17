@@ -7,7 +7,7 @@ from nicegui import ui
 import jsonlog
 import servers as servers_module
 import action as action_module
-from .shared import APP_TITLE, APP_LOGO_PATH, user_session, db_client
+from .shared import APP_TITLE, APP_LOGO_PATH, user_session, db_client, redis_client
 
 logger = jsonlog.setup_logger("servers_page")
 
@@ -35,7 +35,7 @@ def servers_page():
         return
     
     # Initialize Managers
-    server_manager = servers_module.ServerManager(db_client)
+    server_manager = servers_module.ServerManager(db_client, redis_client)
     action_manager = action_module.ActionManager(db_client)
     
     # Load all available actions

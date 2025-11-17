@@ -5,8 +5,11 @@ Handles action retrieval and execution via SSH (paramiko) and HTTP (requests).
 
 import jsonlog
 import database as db
+import config as env_config
+from redis_cache import RedisClient
 import paramiko
 import requests
+import time
 import json
 from typing import Optional, Dict, List, Any, Tuple
 from dataclasses import dataclass
@@ -75,16 +78,24 @@ class ExecutionResult:
 class ActionManager:
     """Action management and execution."""
     
-    def __init__(self, db_client: db.DatabaseClient):
+    def __init__(self, db_client: db.DatabaseClient, redis_client: Optional[RedisClient] = None):
         self.db = db_client
+        self.redis = redis_client
         self.logger = logger
+        
+        # Get APP_NAME for cache key prefix
+        app_config = env_config.Config(group="APP")
+        self.app_name = app_config.get("APP_NAME", "smart_system")
+        
+        # Cache TTL (5 minutes)
+        self.cache_ttl = 300
     
     # ===== Action Retrieval =====
     
     def get_all_actions(self, action_type: Optional[str] = None, 
                        active_only: bool = True) -> List[Dict[str, Any]]:
         """
-        Get all available actions.
+        Get all available actions with Redis caching.
         
         Args:
             action_type: Filter by action type ('command_execute', 'command_get', 'http')
@@ -94,6 +105,16 @@ class ActionManager:
             List of action dictionaries with configs
         """
         try:
+            # Check cache if Redis available
+            if self.redis:
+                cache_suffix = f"{action_type or 'all'}:{'active' if active_only else 'all'}"
+                cache_key = f"{self.app_name}:actions:all_actions:{cache_suffix}"
+                cached_data = self.redis.get_json(cache_key)
+                if cached_data:
+                    self.logger.debug(f"All actions cache HIT for type={action_type}, active_only={active_only}")
+                    return cached_data
+            
+            # Fetch from database
             query = """
                 SELECT a.*, 
                        cc.command_template, cc.timeout_seconds as cmd_timeout,
@@ -130,6 +151,11 @@ class ActionManager:
                         action['parameters'] = json.loads(action['parameters']) if isinstance(action['parameters'], str) else action['parameters']
                     except:
                         action['parameters'] = {}
+            
+            # Cache the result
+            if self.redis:
+                self.redis.set_json(cache_key, actions, ttl=self.cache_ttl)
+                self.logger.debug(f"All actions cached, expires in {self.cache_ttl}s")
             
             return actions
             

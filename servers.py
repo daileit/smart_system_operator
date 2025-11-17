@@ -5,6 +5,8 @@ Handles CRUD operations for servers and their allowed actions.
 
 import jsonlog
 import database as db
+from redis_cache import RedisClient
+import config as env_config
 from typing import Optional, Dict, List, Any
 
 logger = jsonlog.setup_logger("servers")
@@ -13,9 +15,17 @@ logger = jsonlog.setup_logger("servers")
 class ServerManager:
     """Server management with CRUD operations."""
     
-    def __init__(self, db_client: db.DatabaseClient):
+    def __init__(self, db_client: db.DatabaseClient, redis_client: Optional[RedisClient] = None):
         self.db = db_client
+        self.redis = redis_client
         self.logger = logger
+        
+        # Get APP_NAME for cache key prefix
+        app_config = env_config.Config(group="APP")
+        self.app_name = app_config.get("APP_NAME", "smart_system")
+        
+        # Cache TTL (5 minutes)
+        self.cache_ttl = 300
     
     def create_server(self, name: str, ip_address: str, username: str, ssh_private_key: str,
                      port: int = 22, description: Optional[str] = None, 
@@ -70,10 +80,31 @@ class ServerManager:
             return None
     
     def get_server(self, server_id: int, include_actions: bool = False) -> Optional[Dict[str, Any]]:
+        """
+        Get server by ID with Redis caching.
+        
+        Args:
+            server_id: Server ID
+            include_actions: Whether to include allowed actions
+            
+        Returns:
+            Server dictionary or None
+        """
         try:
+            # Check cache if Redis available
+            if self.redis:
+                cache_key = f"{self.app_name}:servers:server_info:{server_id}"
+                cached_data = self.redis.get_json(cache_key)
+                if cached_data:
+                    # Verify if cached data matches include_actions requirement
+                    if include_actions == ('allowed_actions' in cached_data):
+                        self.logger.debug(f"Server info cache HIT for server_id={server_id}")
+                        return cached_data
+            
+            # Fetch from database
             server = self.db.fetch_one(
                 """
-                SELECT s.name, s.ip_address, s.description, s.created_by, s.created_at
+                SELECT s.*
                 FROM servers s
                 WHERE s.id = %s
                 """,
@@ -85,6 +116,11 @@ class ServerManager:
             
             if include_actions:
                 server['allowed_actions'] = self.get_server_actions(server_id)
+            
+            # Cache the result
+            if self.redis:
+                self.redis.set_json(cache_key, server, ttl=self.cache_ttl)
+                self.logger.debug(f"Server info cached for server_id={server_id}, expires in {self.cache_ttl}s")
             
             return server
             
@@ -176,6 +212,11 @@ class ServerManager:
             
             if rows_affected:
                 self.logger.info(f"Updated server {server_id}")
+                
+                # Invalidate Redis cache for this server
+                if self.redis:
+                    self.redis.invalidate_server_cache(server_id, self.app_name)
+                
                 return True
             return False
             
@@ -248,6 +289,11 @@ class ServerManager:
             
             rows_affected = self.db.execute_many(query, values)
             self.logger.info(f"Attached {rows_affected} actions to server {server_id}")
+            
+            # Invalidate Redis cache for this server
+            if self.redis:
+                self.redis.invalidate_server_cache(server_id, self.app_name)
+            
             return True
             
         except Exception as e:
@@ -273,6 +319,11 @@ class ServerManager:
             
             if rows_affected:
                 self.logger.info(f"Detached action {action_id} from server {server_id}")
+                
+                # Invalidate Redis cache for this server
+                if self.redis:
+                    self.redis.invalidate_server_cache(server_id, self.app_name)
+                
                 return True
             return False
             
@@ -297,6 +348,11 @@ class ServerManager:
             )
             
             self.logger.info(f"Detached all actions from server {server_id}")
+            
+            # Invalidate Redis cache for this server
+            if self.redis:
+                self.redis.invalidate_server_cache(server_id, self.app_name)
+            
             return True
             
         except Exception as e:
@@ -306,7 +362,7 @@ class ServerManager:
     def get_server_actions(self, server_id: int, 
                           automatic_only: bool = False) -> List[Dict[str, Any]]:
         """
-        Get all actions allowed for a server.
+        Get all actions allowed for a server with Redis caching.
         
         Args:
             server_id: Server ID
@@ -316,6 +372,16 @@ class ServerManager:
             List of action dictionaries with automatic flag
         """
         try:
+            # Check cache if Redis available
+            if self.redis:
+                cache_suffix = "automatic" if automatic_only else "all"
+                cache_key = f"{self.app_name}:servers:server_actions:{server_id}:{cache_suffix}"
+                cached_data = self.redis.get_json(cache_key)
+                if cached_data:
+                    self.logger.debug(f"Server actions cache HIT for server_id={server_id}, automatic_only={automatic_only}")
+                    return cached_data
+            
+            # Fetch from database
             query = """
                 SELECT a.*, cc.command_template, cc.timeout_seconds, 
                        saa.automatic, saa.created_at as attached_at
@@ -331,6 +397,12 @@ class ServerManager:
             query += " ORDER BY a.action_type, a.action_name"
             
             actions = self.db.execute_query(query, (server_id,))
+            
+            # Cache the result
+            if self.redis:
+                self.redis.set_json(cache_key, actions, ttl=self.cache_ttl)
+                self.logger.debug(f"Server actions cached for server_id={server_id}, expires in {self.cache_ttl}s")
+            
             return actions
             
         except Exception as e:
@@ -363,6 +435,11 @@ class ServerManager:
             if rows_affected:
                 mode = "automatic" if automatic else "advisory"
                 self.logger.info(f"Set action {action_id} to {mode} mode for server {server_id}")
+                
+                # Invalidate Redis cache for this server
+                if self.redis:
+                    self.redis.invalidate_server_cache(server_id, self.app_name)
+                
                 return True
             return False
             

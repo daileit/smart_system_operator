@@ -99,7 +99,7 @@ def dashboard_page():
         return
     
     # Initialize managers
-    server_manager = ServerManager(db_client) if db_client else None
+    server_manager = ServerManager(db_client, redis_client) if db_client else None
     
     # State
     selected_server_id = {'value': None}

@@ -29,6 +29,7 @@ class Config:
         self._configs['REDIS_DB'] = os.getenv('REDIS_DB', '0')
         
         # Application configs
+        self._configs['APP_NAME'] = os.getenv('APP_NAME', 'smart_system')
         self._configs['APP_ENV'] = os.getenv('APP_ENV', 'development')
         self._configs['APP_DEBUG'] = os.getenv('APP_DEBUG', 'false')
         self._configs['APP_INIT_SECRET'] = os.getenv('APP_INIT_SECRET', uuid4().hex)

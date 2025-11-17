@@ -108,3 +108,51 @@ class RedisClient:
     def exists(self, key):
         # Check if the key exists in the Redis database
         return self.client.exists(key) > 0
+    
+    def delete_pattern(self, pattern):
+        """Delete all keys matching a pattern (e.g., 'smart_system:servers:*')."""
+        try:
+            keys = self.client.keys(pattern)
+            if keys:
+                deleted = self.client.delete(*keys)
+                logger.info(f"Deleted {deleted} cache keys matching pattern: {pattern}")
+                return deleted
+            return 0
+        except redis.RedisError as e:
+            logger.warning(f"Error deleting keys matching pattern {pattern}: {e}")
+            return 0
+    
+    def invalidate_server_cache(self, server_id, app_name="smart_system"):
+        """Invalidate all cache entries related to a specific server.
+        
+        Args:
+            server_id: Server ID
+            app_name: Application name prefix (default: smart_system)
+        """
+        patterns = [
+            f"{app_name}:servers:server_actions:{server_id}:*",
+            f"{app_name}:servers:server_info:{server_id}",
+        ]
+        total_deleted = 0
+        for pattern in patterns:
+            deleted = self.delete_pattern(pattern)
+            total_deleted += deleted
+        
+        # Also invalidate the all actions cache as it may be affected
+        self.delete_pattern(f"{app_name}:actions:all_actions:*")
+        
+        if total_deleted > 0:
+            logger.info(f"Invalidated {total_deleted} cache entries for server {server_id}")
+        return total_deleted
+    
+    def invalidate_action_cache(self, app_name="smart_system"):
+        """Invalidate all action-related cache entries.
+        
+        Args:
+            app_name: Application name prefix (default: smart_system)
+        """
+        pattern = f"{app_name}:actions:*"
+        deleted = self.delete_pattern(pattern)
+        if deleted > 0:
+            logger.info(f"Invalidated {deleted} action cache entries")
+        return deleted
