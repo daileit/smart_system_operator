@@ -420,6 +420,23 @@ class AIAnalyzer:
                 f"confidence: {decision.confidence:.2f}, risk: {decision.risk_level}"
             )
             
+            # If no actions but there's analysis, log it as observation
+            if not decision.recommended_actions and decision.reasoning:
+                self.db.execute_update(
+                    """
+                    INSERT INTO execution_logs 
+                    (server_id, action_id, execution_type, ai_reasoning, execution_details, status)
+                    VALUES (%s, NULL, %s, %s, %s, %s)
+                    """,
+                    (server_id, 'analyzed', decision.reasoning, 
+                     json.dumps({
+                         'confidence': decision.confidence,
+                         'risk_level': decision.risk_level,
+                         'requires_approval': decision.requires_approval
+                     }), 'success')
+                )
+                self.logger.info(f"AI analysis logged (no actions needed): {server['name']}")
+            
             # Process each recommended action
             additional_metrics = []
             for action_rec in decision.recommended_actions:
