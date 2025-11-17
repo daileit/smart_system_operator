@@ -209,24 +209,20 @@ class AIAnalyzer:
         """Get Redis key for server metrics queue."""
         return f"server_metrics:{server_id}"
     
-    def _get_historical_analysis(self, server_id: int) -> List[Dict[str, Any]]:
-        """Get last 2 AI analysis results for historical context."""
+    def _get_historical_analysis(self, server_id: int, limit: int = 2) -> List[Dict[str, Any]]:
+        """Get last N AI analysis results for historical context."""
         try:
             historical = self.db.execute_query(
                 """
-                SELECT 
-                    ai_reasoning,
-                    execution_details,
-                    status,
-                    executed_at
+                SELECT ai_reasoning, execution_details, status, executed_at
                 FROM execution_logs
                 WHERE server_id = %s 
                   AND execution_type = 'recommended'
                   AND ai_reasoning IS NOT NULL
                 ORDER BY executed_at DESC
-                LIMIT 2
+                LIMIT %s
                 """,
-                (server_id,)
+                (server_id, limit)
             )
             
             results = []
@@ -242,12 +238,177 @@ class AIAnalyzer:
                     })
                 except Exception as e:
                     self.logger.warning(f"Error parsing historical analysis: {e}")
-                    continue
-            
             return results
         except Exception as e:
             self.logger.error(f"Error getting historical analysis: {e}")
             return []
+    
+    def _get_server_context(self, server_id: int) -> Dict[str, Any]:
+        """Get all context data for a server (metrics, logs, stats)."""
+        # Get metrics from Redis
+        key = self._get_metrics_key(server_id)
+        metrics_list = self.redis.get_json_list(key)
+        recent_metrics = metrics_list[:self.max_metrics_per_analysis] if metrics_list else []
+        
+        # Get historical analysis
+        historical_analysis = self._get_historical_analysis(server_id)
+        
+        # Get execution logs
+        execution_logs = self.db.execute_query(
+            """
+            SELECT action_id, execution_type, status, execution_result, 
+                   ai_reasoning, executed_at
+            FROM execution_logs
+            WHERE server_id = %s
+            ORDER BY executed_at DESC
+            LIMIT 10
+            """,
+            (server_id,)
+        )
+        
+        # Get server statistics
+        server_stats = self.db.fetch_one(
+            """
+            SELECT 
+                COUNT(*) as total_executions,
+                SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) as successful_executions,
+                SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) as failed_executions,
+                AVG(execution_time) as avg_execution_time
+            FROM execution_logs
+            WHERE server_id = %s AND execution_type = 'executed'
+            """,
+            (server_id,)
+        )
+        
+        return {
+            'recent_metrics': recent_metrics,
+            'historical_analysis': historical_analysis,
+            'execution_logs': execution_logs,
+            'server_stats': server_stats
+        }
+    
+    def _log_action(self, server_id: int, action_id: int, execution_type: str,
+                   reasoning: str, action_data: Dict[str, Any], 
+                   result: Optional[Any] = None, status: str = 'recommended'):
+        """Log an action to database."""
+        try:
+            if execution_type == 'executed':
+                self.db.execute_update(
+                    """
+                    INSERT INTO execution_logs 
+                    (server_id, action_id, execution_type, ai_reasoning, execution_details, 
+                     execution_result, status, execution_time)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                    """,
+                    (
+                        server_id, action_id, execution_type, reasoning,
+                        json.dumps(action_data),
+                        result.output if result else None,
+                        'success' if (result and result.success) else 'failed',
+                        result.execution_time if result else None
+                    )
+                )
+            else:
+                self.db.execute_update(
+                    """
+                    INSERT INTO execution_logs 
+                    (server_id, action_id, execution_type, ai_reasoning, execution_details, status)
+                    VALUES (%s, %s, %s, %s, %s, %s)
+                    """,
+                    (server_id, action_id, execution_type, reasoning, 
+                     json.dumps(action_data), status)
+                )
+        except Exception as e:
+            self.logger.error(f"Error logging action: {e}")
+    
+    def _is_action_automatic(self, server_id: int, action_id: int) -> bool:
+        """Check if action is configured for automatic execution."""
+        try:
+            result = self.db.fetch_one(
+                "SELECT automatic FROM server_allowed_actions WHERE server_id = %s AND action_id = %s",
+                (server_id, action_id)
+            )
+            return result['automatic'] if result else False
+        except Exception as e:
+            self.logger.error(f"Error checking automatic flag: {e}")
+            return False
+    
+    async def _execute_and_store_get_action(self, server: Dict[str, Any], 
+                                           action_rec: Dict[str, Any], 
+                                           reasoning: str) -> Optional[Dict[str, Any]]:
+        """Execute a get action and return results for AI context."""
+        action_id = action_rec.get('action_id')
+        action_name = action_rec.get('action_name', 'unknown')
+        parameters = action_rec.get('parameters', {})
+        server_id = server['id']
+        
+        try:
+            self.logger.info(f"Executing GET action '{action_name}' for server {server['name']}")
+            
+            # Execute action
+            result = self.action_manager.execute_action(
+                action_id=action_id,
+                server_info=server,
+                params=parameters
+            )
+            
+            # Log execution
+            self._log_action(server_id, action_id, 'executed', reasoning, action_rec, result)
+            
+            if result.success:
+                self.logger.info(f"GET action '{action_name}' executed successfully for {server['name']}")
+                # Return data to be added to next AI analysis
+                return {
+                    'action_name': action_name,
+                    'output': result.output,
+                    'execution_time': result.execution_time,
+                    'collected_at': datetime.now().isoformat(),
+                    'triggered_by': 'ai_recommendation'
+                }
+            else:
+                self.logger.warning(f"GET action '{action_name}' failed for {server['name']}: {result.error}")
+                return None
+                
+        except Exception as e:
+            self.logger.error(f"Error executing GET action '{action_name}': {e}")
+            return None
+    
+    async def _process_action(self, server: Dict[str, Any], action_rec: Dict[str, Any], 
+                             decision, action_type: str) -> Optional[Dict[str, Any]]:
+        """Process a single action (log and optionally execute)."""
+        action_id = action_rec.get('action_id')
+        action_name = action_rec.get('action_name', 'unknown')
+        server_id = server['id']
+        
+        # Log as recommended
+        self._log_action(server_id, action_id, 'recommended', decision.reasoning, action_rec)
+        
+        # Handle command_get actions - always execute regardless of approval
+        if action_type == 'command_get':
+            return await self._execute_and_store_get_action(server, action_rec, decision.reasoning)
+        
+        # Handle command_execute actions - check approval and automatic flag
+        elif action_type == 'command_execute':
+            if decision.risk_level != 'high' and not decision.requires_approval:
+                is_automatic = self._is_action_automatic(server_id, action_id)
+                
+                if is_automatic:
+                    self.logger.info(f"Auto-executing action '{action_name}' for server {server['name']}")
+                    
+                    result = self.action_manager.execute_action(
+                        action_id=action_id,
+                        server_info=server,
+                        params=action_rec.get('parameters', {})
+                    )
+                    
+                    self._log_action(server_id, action_id, 'executed', decision.reasoning, action_rec, result)
+                    
+                    self.logger.info(
+                        f"Auto-executed action '{action_name}' for {server['name']}: "
+                        f"{'success' if result.success else 'failed'}"
+                    )
+        
+        return None
     
     async def _analyze_server(self, server_id: int):
         """Analyze metrics for a single server."""
@@ -258,125 +419,87 @@ class AIAnalyzer:
                 self.logger.warning(f"Server {server_id} not found")
                 return
             
-            # PART 1: Real-time data from Redis
-            key = self._get_metrics_key(server_id)
-            metrics_list = self.redis.get_json_list(key)
+            # Get all context
+            context = self._get_server_context(server_id)
             
-            if not metrics_list:
+            if not context['recent_metrics']:
                 self.logger.debug(f"No metrics available for server {server['name']} (ID: {server_id})")
                 return
             
-            # Take max 5 most recent metrics
-            recent_metrics = metrics_list[:self.max_metrics_per_analysis]
+            self.logger.info(f"Analyzing {len(context['recent_metrics'])} metrics for server {server['name']} (ID: {server_id})")
             
-            if not recent_metrics:
-                return
-            
-            self.logger.info(f"Analyzing {len(recent_metrics)} metrics for server {server['name']} (ID: {server_id})")
-            
-            # PART 2: Historical AI analysis results (last 2)
-            historical_analysis = self._get_historical_analysis(server_id)
-            
-            # Get execution logs for context
-            execution_logs = self.db.execute_query(
-                """
-                SELECT action_id, execution_type, status, execution_result, 
-                       ai_reasoning, executed_at
-                FROM execution_logs
-                WHERE server_id = %s
-                ORDER BY executed_at DESC
-                LIMIT 10
-                """,
-                (server_id,)
-            )
-            
-            # Get server statistics
-            server_stats = self.db.fetch_one(
-                """
-                SELECT 
-                    COUNT(*) as total_executions,
-                    SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) as successful_executions,
-                    SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) as failed_executions,
-                    AVG(execution_time) as avg_execution_time
-                FROM execution_logs
-                WHERE server_id = %s AND execution_type = 'executed'
-                """,
-                (server_id,)
-            )
-            
-            # Get available actions for this server
+            # Get available actions
             available_actions = server.get('allowed_actions', [])
-            
             if not available_actions:
                 self.logger.warning(f"No actions available for server {server['name']} (ID: {server_id})")
                 return
             
-            # Prepare context data for AI
-            analysis_context = {
-                'realtime_metrics': recent_metrics,
-                'historical_analysis': historical_analysis,
-                'execution_logs': execution_logs,
-                'server_statistics': server_stats
-            }
-            
-            # Call OpenAI for analysis with enhanced context
+            # Call OpenAI for analysis
             decision = self.openai.analyze_server_metrics(
                 server_info=server,
                 available_actions=available_actions,
-                execution_logs=execution_logs,
-                server_statistics=server_stats,
+                execution_logs=context['execution_logs'],
+                server_statistics=context['server_stats'],
                 current_metrics={
-                    'latest': recent_metrics[0] if recent_metrics else None,
-                    'recent_history': recent_metrics[1:] if len(recent_metrics) > 1 else [],
-                    'ai_history': historical_analysis
+                    'latest': context['recent_metrics'][0] if context['recent_metrics'] else None,
+                    'recent_history': context['recent_metrics'][1:] if len(context['recent_metrics']) > 1 else [],
+                    'ai_history': context['historical_analysis']
                 }
             )
-            
-            # Store AI recommendation with enhanced context
-            recommendation_data = {
-                'server_id': server_id,
-                'server_name': server['name'],
-                'timestamp': datetime.now().isoformat(),
-                'metrics_analyzed': len(recent_metrics),
-                'historical_context_used': len(historical_analysis),
-                'decision': decision.to_dict(),
-                'confidence': decision.confidence,
-                'risk_level': decision.risk_level,
-                'requires_approval': decision.requires_approval
-            }
             
             self.logger.info(
                 f"AI analysis completed for {server['name']}: "
                 f"{len(decision.recommended_actions)} actions recommended, "
-                f"confidence: {decision.confidence:.2f}, risk: {decision.risk_level}, "
-                f"historical context: {len(historical_analysis)} previous analyses"
+                f"confidence: {decision.confidence:.2f}, risk: {decision.risk_level}"
             )
             
-            # Log each recommended action
+            # Process each recommended action
+            additional_metrics = []
             for action_rec in decision.recommended_actions:
                 action_id = action_rec.get('action_id')
                 
-                # Insert as 'recommended' in execution_logs
-                self.db.execute_update(
-                    """
-                    INSERT INTO execution_logs 
-                    (server_id, action_id, execution_type, ai_reasoning, execution_details, status)
-                    VALUES (%s, %s, 'recommended', %s, %s, 'recommended')
-                    """,
-                    (
-                        server_id,
-                        action_id,
-                        decision.reasoning,
-                        json.dumps(action_rec)
-                    )
-                )
+                # Get action type from available actions
+                action_info = next((a for a in available_actions if a['id'] == action_id), None)
+                if not action_info:
+                    self.logger.warning(f"Action {action_id} not found in available actions")
+                    continue
+                
+                action_type = action_info.get('action_type')
+                
+                # Process action and collect any additional metrics from GET commands
+                get_data = await self._process_action(server, action_rec, decision, action_type)
+                if get_data:
+                    additional_metrics.append(get_data)
             
-            # Auto-execute low-risk actions if automatic=TRUE
-            if decision.risk_level == 'low' and not decision.requires_approval:
-                await self._auto_execute_actions(server, decision)
+            # If we executed GET commands, add their results to Redis for next analysis
+            if additional_metrics:
+                key = self._get_metrics_key(server_id)
+                current_metrics = self.redis.get_json_list(key) or []
+                
+                # Create a new metrics entry with AI-requested data
+                new_metric = {
+                    'server_id': server_id,
+                    'server_name': server['name'],
+                    'timestamp': datetime.now().isoformat(),
+                    'data': {item['action_name']: item for item in additional_metrics},
+                    'source': 'ai_requested'
+                }
+                
+                # Prepend to metrics list
+                current_metrics.insert(0, new_metric)
+                
+                # Keep only last 100
+                if len(current_metrics) > 100:
+                    current_metrics = current_metrics[:100]
+                
+                self.redis.set_json_list(key, current_metrics)
+                self.logger.info(f"Added {len(additional_metrics)} AI-requested metrics to Redis for {server['name']}")
             
-            # Remove consumed metrics from queue
+            # Remove consumed metrics from queue (keep AI-requested ones)
+            key = self._get_metrics_key(server_id)
+            metrics_list = self.redis.get_json_list(key) or []
             remaining_metrics = metrics_list[self.max_metrics_per_analysis:]
+            
             if remaining_metrics:
                 self.redis.set_json_list(key, remaining_metrics)
             else:
@@ -384,61 +507,6 @@ class AIAnalyzer:
             
         except Exception as e:
             self.logger.error(f"Error analyzing server {server_id}: {e}")
-    
-    async def _auto_execute_actions(self, server: Dict[str, Any], decision):
-        """Auto-execute low-risk actions if configured."""
-        try:
-            server_id = server['id']
-            
-            for action_rec in decision.recommended_actions:
-                action_id = action_rec.get('action_id')
-                parameters = action_rec.get('parameters', {})
-                
-                # Check if action is set to automatic
-                is_automatic = self.db.fetch_one(
-                    """
-                    SELECT automatic FROM server_allowed_actions
-                    WHERE server_id = %s AND action_id = %s
-                    """,
-                    (server_id, action_id)
-                )
-                
-                if is_automatic and is_automatic['automatic']:
-                    self.logger.info(f"Auto-executing action {action_id} for server {server['name']}")
-                    
-                    # Execute action
-                    result = self.action_manager.execute_action(
-                        action_id=action_id,
-                        server_info=server,
-                        params=parameters
-                    )
-                    
-                    # Log execution
-                    self.db.execute_update(
-                        """
-                        INSERT INTO execution_logs 
-                        (server_id, action_id, execution_type, ai_reasoning, execution_details, 
-                         execution_result, status, execution_time)
-                        VALUES (%s, %s, 'executed', %s, %s, %s, %s, %s)
-                        """,
-                        (
-                            server_id,
-                            action_id,
-                            decision.reasoning,
-                            json.dumps(action_rec),
-                            result.output or result.error,
-                            'success' if result.success else 'failed',
-                            result.execution_time
-                        )
-                    )
-                    
-                    self.logger.info(
-                        f"Auto-executed action {action_id} for {server['name']}: "
-                        f"{'success' if result.success else 'failed'}"
-                    )
-        
-        except Exception as e:
-            self.logger.error(f"Error auto-executing actions for server {server['name']}: {e}")
     
     async def _analysis_cycle(self):
         """Execute one analysis cycle for all servers with metrics."""

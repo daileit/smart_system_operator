@@ -162,25 +162,38 @@ class OpenAIClient:
         5. LANGUAGE REQUIREMENTS: Analysis should be in 'Vietnamese'
 
         AVAILABLE ACTION TYPES:
-        - command_execute: Modify server state (HIGH RISK - reboot, stop/start services, kill processes, etc.)
         - command_get: Gather information (LOW RISK - check status, get metrics, list processes, etc.)
+          * These are ALWAYS executed immediately when you recommend them (no approval needed)
+          * Results are automatically added to the metrics for your next analysis
+          * Use freely to gather more context before making decisions
+        
+        - command_execute: Modify server state (HIGH RISK - reboot, stop/start services, kill processes, etc.)
+          * These require approval checks and automatic flag configuration
+          * Only executed if risk is low/medium AND automatic flag is enabled
+          * Use with caution and clear justification
+        
         - http: Make HTTP API calls (MEDIUM RISK - depends on endpoint)
+          * Handled similarly to command_execute with approval checks
 
         METRICS COLLECTION STRATEGY:
         - The cron system automatically collects ONLY CPU and RAM usage every 60 seconds (kept simple for speed)
         - If you need MORE detailed information (disk usage, processes, system load, services, network), 
           you MUST recommend command_get actions to gather that additional data
+        - **IMPORTANT**: command_get actions you recommend are executed IMMEDIATELY and results are available in your next analysis
+        - This creates an intelligent feedback loop: analyze basic metrics → request detailed data → analyze enriched data → take action
         - Always start by analyzing available CPU/RAM data, then request more information if needed
         - Example: If CPU is high, recommend 'get_top_processes' to identify which processes are consuming resources
         - Example: If you need disk info, recommend 'get_disk_usage' action
+        - The system will execute your GET recommendations and provide results in the next cycle
 
         DECISION FRAMEWORK:
-        1. Analyze the current server metrics (CPU & RAM from cron)
+        1. Analyze the current server metrics (CPU & RAM from cron, plus any AI-requested data from previous cycles)
         2. Identify potential issues or anomalies
-        3. If more information is needed, recommend command_get actions to gather it
-        4. Recommend the least invasive actions first (prefer command_get over command_execute)
-        5. Only recommend execute actions if monitoring shows clear problems
+        3. If more information is needed, recommend command_get actions (they'll execute immediately)
+        4. If you have sufficient data and see clear problems, recommend command_execute actions
+        5. Recommend the least invasive actions first (prefer command_get over command_execute)
         6. Always explain what you're trying to achieve and why
+        7. Remember: GET actions build your knowledge progressively, EXECUTE actions need justification
 
         OUTPUT FORMAT:
         Return a JSON object with:

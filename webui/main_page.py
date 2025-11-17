@@ -274,7 +274,7 @@ def main_page():
                         ui.icon('bug_report', size='sm', color='primary')
                         ui.label(f'Log Level: {app_config.get("APP_LOG_LEVEL", "INFO")}').classes('text-body2')
                     with ui.row().classes('items-center gap-2'):
-                        ui.icon('clock', size='sm', color='primary')
+                        ui.icon('schedule', size='sm', color='primary')
                         ui.label(f'Cron Interval: {app_config.get("APP_CRON_INTERVAL", "60s")}').classes('text-body2')
             
             # Your Access
