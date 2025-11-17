@@ -43,7 +43,7 @@ class MetricsCrawler:
         return f"server_metrics:{server_id}"
     
     async def _collect_server_metrics(self, server: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-        """Collect basic metrics (CPU & RAM only) for a single server."""
+        """Collect get metrics for a single server."""
         server_id = server['id']
         server_name = server['name']
         
@@ -64,13 +64,12 @@ class MetricsCrawler:
                 WHERE saa.server_id = %s 
                   AND a.action_type = 'command_get' 
                   AND a.is_active = 1
-                  AND a.action_name IN ('get_cpu_usage', 'get_memory_usage')
                 """,
                 (server_id,)
             )
             
             if not allowed_actions:
-                self.logger.warning(f"No CPU/RAM monitoring actions configured for server {server_name} (ID: {server_id})")
+                self.logger.warning(f"No get metrics actions configured for server {server_name} (ID: {server_id})")
                 return None
             
             # Collect basic metrics (CPU & RAM only)
