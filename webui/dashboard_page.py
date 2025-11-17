@@ -198,6 +198,9 @@ def dashboard_page():
                 # Look for recommendation within 5 minutes before this execution
                 found = False
                 for group in grouped:
+                    if not group['recommendation']:
+                        continue
+                    
                     if group['recommendation'].get('action_id') == action_id:
                         rec_time = group['recommendation'].get('executed_at')
                         exec_time = timestamp
