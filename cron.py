@@ -32,44 +32,18 @@ class MetricsCrawler:
         self.running = False
         self.task = None
         
-        # Default monitoring actions to execute
+        # Default monitoring actions to execute (kept simple for speed)
         self.monitoring_actions = [
             'get_cpu_usage',
-            'get_memory_usage',
-            'get_disk_usage',
-            'get_system_load',
-            'get_top_processes'
+            'get_memory_usage'
         ]
     
     def _get_metrics_key(self, server_id: int) -> str:
         """Get Redis key for server metrics queue."""
         return f"server_metrics:{server_id}"
     
-    def _parse_top_processes(self, output: str) -> List[Dict[str, Any]]:
-        """Parse top processes output to extract resource consumption."""
-        processes = []
-        try:
-            lines = output.strip().split('\n')
-            # Skip header line and parse process data
-            for line in lines[1:11]:  # Top 10 processes
-                parts = line.split()
-                if len(parts) >= 11:
-                    try:
-                        processes.append({
-                            'user': parts[0],
-                            'pid': parts[1],
-                            'cpu_percent': float(parts[2]),
-                            'mem_percent': float(parts[3]),
-                            'command': ' '.join(parts[10:])
-                        })
-                    except (ValueError, IndexError):
-                        continue
-        except Exception as e:
-            self.logger.warning(f"Error parsing top processes: {e}")
-        return processes
-    
     async def _collect_server_metrics(self, server: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-        """Collect metrics for a single server."""
+        """Collect basic metrics (CPU & RAM only) for a single server."""
         server_id = server['id']
         server_name = server['name']
         
@@ -81,55 +55,43 @@ class MetricsCrawler:
                 'data': {}
             }
             
-            # Get server's allowed actions
+            # Get server's allowed CPU and RAM monitoring actions only
             allowed_actions = self.db.execute_query(
                 """
                 SELECT a.action_name, a.id as action_id
                 FROM actions a
                 JOIN server_allowed_actions saa ON a.id = saa.action_id
-                WHERE saa.server_id = %s AND a.action_type = 'command_get' AND a.is_active = 1
+                WHERE saa.server_id = %s 
+                  AND a.action_type = 'command_get' 
+                  AND a.is_active = 1
+                  AND a.action_name IN ('get_cpu_usage', 'get_memory_usage')
                 """,
                 (server_id,)
             )
             
             if not allowed_actions:
-                self.logger.warning(f"No monitoring actions configured for server {server_name} (ID: {server_id})")
+                self.logger.warning(f"No CPU/RAM monitoring actions configured for server {server_name} (ID: {server_id})")
                 return None
             
-            # Collect metrics from each monitoring action
+            # Collect basic metrics (CPU & RAM only)
             for action in allowed_actions:
                 action_name = action['action_name']
                 action_id = action['action_id']
                 
                 try:
-                    # Prepare parameters based on action type
-                    params = {}
-                    if action_name == 'get_disk_usage':
-                        params = {'path': '/'}
-                    elif action_name == 'get_process_list':
-                        params = {'process_name': 'python'}
-                    elif action_name == 'get_network_connections':
-                        params = {'port': str(server.get('port', 22))}
-                    
-                    # Execute action
+                    # Execute action (no parameters needed for CPU/RAM)
                     result = self.action_manager.execute_action(
                         action_id=action_id,
                         server_info=server,
-                        params=params
+                        params={}
                     )
                     
                     if result.success:
-                        metric_data = {
+                        metrics['data'][action_name] = {
                             'output': result.output,
                             'execution_time': result.execution_time,
                             'collected_at': datetime.now().isoformat()
                         }
-                        
-                        # Parse top processes for resource consumption
-                        if action_name == 'get_top_processes':
-                            metric_data['parsed_processes'] = self._parse_top_processes(result.output)
-                        
-                        metrics['data'][action_name] = metric_data
                         self.logger.debug(f"Collected {action_name} for {server_name}")
                     else:
                         self.logger.warning(f"Failed to collect {action_name} for {server_name}: {result.error}")

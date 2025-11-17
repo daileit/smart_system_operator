@@ -166,12 +166,21 @@ class OpenAIClient:
         - command_get: Gather information (LOW RISK - check status, get metrics, list processes, etc.)
         - http: Make HTTP API calls (MEDIUM RISK - depends on endpoint)
 
+        METRICS COLLECTION STRATEGY:
+        - The cron system automatically collects ONLY CPU and RAM usage every 60 seconds (kept simple for speed)
+        - If you need MORE detailed information (disk usage, processes, system load, services, network), 
+          you MUST recommend command_get actions to gather that additional data
+        - Always start by analyzing available CPU/RAM data, then request more information if needed
+        - Example: If CPU is high, recommend 'get_top_processes' to identify which processes are consuming resources
+        - Example: If you need disk info, recommend 'get_disk_usage' action
+
         DECISION FRAMEWORK:
-        1. Analyze the current server metrics and logs
+        1. Analyze the current server metrics (CPU & RAM from cron)
         2. Identify potential issues or anomalies
-        3. Recommend the least invasive actions first (prefer command_get over command_execute)
-        4. Only recommend execute actions if monitoring shows clear problems
-        5. Always explain what you're trying to achieve and why
+        3. If more information is needed, recommend command_get actions to gather it
+        4. Recommend the least invasive actions first (prefer command_get over command_execute)
+        5. Only recommend execute actions if monitoring shows clear problems
+        6. Always explain what you're trying to achieve and why
 
         OUTPUT FORMAT:
         Return a JSON object with:
