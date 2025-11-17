@@ -171,12 +171,15 @@ def dashboard_page():
                 r.executed_at as rec_time,
                 r.status as rec_status,
                 r.action_id,
+                a.action_name,
+                a.action_type,
                 e.id as exec_id,
                 e.execution_result,
                 e.status as exec_status,
                 e.execution_time,
                 e.executed_at as exec_time
             FROM execution_logs r
+            LEFT JOIN actions a ON r.action_id = a.id
             LEFT JOIN execution_logs e ON e.recommendation_id = r.id
             WHERE r.server_id = %s AND r.execution_type = 'recommended'
             ORDER BY r.executed_at DESC
@@ -204,7 +207,9 @@ def dashboard_page():
                         'execution_details': row.get('execution_details'),
                         'executed_at': row.get('rec_time'),
                         'status': row.get('rec_status'),
-                        'action_id': row.get('action_id')
+                        'action_id': row.get('action_id'),
+                        'action_name': row.get('action_name'),
+                        'action_type': row.get('action_type')
                     },
                     'executions': []
                 }
@@ -428,9 +433,12 @@ def dashboard_page():
                     timestamp = rec['executed_at'].strftime('%Y-%m-%d %H:%M:%S') if rec.get('executed_at') else 'Unknown'
                     reasoning = rec.get('ai_reasoning', 'No reasoning provided')
                     status = rec.get('status', 'unknown')
-                    execution_type = rec.get('execution_type', 'recommended')
                     
-                    # Parse execution details
+                    # Get action info from query result
+                    action_name = rec.get('action_name', 'Unknown action')
+                    action_type = rec.get('action_type', 'unknown')
+                    
+                    # Parse execution details for additional info (priority, confidence, etc.)
                     details = {}
                     try:
                         if rec.get('execution_details'):
@@ -438,9 +446,7 @@ def dashboard_page():
                     except:
                         pass
                     
-                    action_name = details.get('action_name', 'Unknown action')
                     priority = details.get('priority', 5)
-                    action_type = details.get('action_type', 'unknown')
                     
                     # AI message card with enhanced styling and animation
                     card_bg = 'bg-gradient-to-r from-blue-50 to-indigo-50' if idx == 0 else 'bg-blue-50'
@@ -455,7 +461,7 @@ def dashboard_page():
                                     icon_name = 'info' if action_type == 'command_get' else 'play_arrow' if action_type == 'command_execute' else 'http'
                                     icon_color = 'text-purple-600' if action_type == 'command_get' else 'text-blue-600' if action_type == 'command_execute' else 'text-green-600'
                                     ui.icon(icon_name, size='sm').classes(f'{icon_color} animate-pulse')
-                                    ui.label(action_name).classes('text-subtitle2 font-bold text-blue-900')
+                                    ui.label(f'AI Agent ({openai_client.model})').classes('text-subtitle2 font-bold text-blue-900')
                                 ui.label(timestamp).classes('text-caption text-gray-500')
                             with ui.row().classes('items-center gap-1'):
                                 # Action type badge
@@ -520,7 +526,7 @@ def dashboard_page():
                                                     exec_icon = 'check_circle' if exec_status == 'success' else 'error' if exec_status == 'failed' else 'info'
                                                     exec_icon_color = 'text-green-600' if exec_status == 'success' else 'text-red-600' if exec_status == 'failed' else 'text-gray-600'
                                                     ui.icon(exec_icon, size='sm').classes(exec_icon_color)
-                                                    ui.label(f'Execution #{exec_idx + 1}').classes('text-subtitle2 font-bold')
+                                                    ui.label(f'{action_name} #{exec_idx + 1}').classes('text-subtitle2 font-bold')
                                                 ui.label(exec_timestamp).classes('text-caption text-gray-600')
                                             
                                             # Show execution result/output

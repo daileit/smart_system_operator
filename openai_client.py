@@ -154,28 +154,45 @@ class OpenAIClient:
 
         RULES:
         1. Safety first - avoid high-risk actions unless critical
-        2. Be concise - max 2 sentences for reasoning
-        3. Use Vietnamese for analysis
+        2. Be CREATIVE and INSIGHTFUL - avoid repetitive patterns, boring analysis
+        3. Use Vietnamese - make it engaging, not robotic
         4. Only recommend actions from assigned_action_ids list
 
         ACTION TYPES:
-        - command_get: Info gathering (always executed immediately, results in next cycle)
+        - command_get: Info gathering (executes immediately, results in next cycle)
         - command_execute: Modify server (needs approval/automatic flag)
         - http: API calls (needs approval)
 
-        PROBE MODES:
+        PROBE STRATEGY - BE CREATIVE:
         - HEALTHY (CPU<80%, RAM<85%): Max 1 GET action or 0 if data sufficient
-        - PROBLEMS detected: Multiple GET actions OK for diagnosis
-        - SUFFICIENT DATA: Focus on fixes, minimal GET actions
+        * Think strategically - what ONE thing would give best insight?
+        * Vary your probes - don't always check the same metrics
+        * Sometimes silence is wisdom - if all looks good, say so
+        
+        - PROBLEMS: Multiple GET actions OK for diagnosis
+        * Be a detective - connect patterns, think laterally
+        * Don't just list symptoms - hypothesize root causes
+        
+        - SUFFICIENT DATA: Focus on smart fixes
+        * Prioritize elegant solutions over brute force
 
-        STRATEGY:
-        Cron auto-collects CPU/RAM every 60s. For more data (disk, processes, services), recommend command_get actions.
-        Your GET recommendations execute immediately and results appear in next analysis cycle.
+        ANALYSIS STYLE:
+        - Be observant and pattern-seeking, not just metric-reporting
+        - Vary your vocabulary - avoid phrases like "tình trạng bình thường", "cần theo dõi", "khuyến nghị"
+        - Think like a system architect, not a checkbox ticker
+        - Notice trends, anomalies, correlations - be insightful
+        - If nothing interesting to probe, confidently say server looks good
+
+        REASONING FORMAT:
+        - Overall: 1-2 sentences max, direct and insightful
+        - Per-action: 1 sentence, specific and purposeful
+        - Example: "CPU ổn định 45%, RAM 60% - hệ thống khỏe, không cần thêm data" (healthy)
+        - Example: "CPU nhảy vọt 89% bất thường - kiểm tra processes để tìm nguyên nhân" (problem)
 
         OUTPUT JSON:
         {
         "recommended_actions": [{"action_id": <int>, "action_name": "<str>", "priority": <1-10>, "parameters": {}, "reasoning": "<brief>"}],
-        "reasoning": "<brief overall>",
+        "reasoning": "<insightful overall>",
         "confidence": <0.0-1.0>,
         "risk_level": "<low|medium|high>",
         "requires_approval": <bool>
@@ -217,29 +234,17 @@ class OpenAIClient:
             )
             
             # Create user message with assigned actions info
-            user_message = f"""Analyze this server and recommend appropriate actions:
+            user_message = f"""SERVER: {json.dumps(server_info, indent=2, default=str)}
 
-            SERVER INFORMATION:
-            {json.dumps(server_info, indent=2, default=str)}
+ASSIGNED ACTION IDs: {json.dumps(assigned_action_ids)}
 
-            ASSIGNED ACTION IDs (only these can be executed):
-            {json.dumps(assigned_action_ids, indent=2)}
+AVAILABLE ACTIONS: {json.dumps(available_actions, indent=2, default=str)}
 
-            AVAILABLE ACTIONS (for your reference - but only recommend assigned ones):
-            {json.dumps(available_actions, indent=2, default=str)}
+RECENT LOGS: {json.dumps(execution_logs or [], indent=2, default=str)}
 
-            RECENT EXECUTION LOGS (last 10):
-            {json.dumps(execution_logs or [], indent=2, default=str)}
+STATISTICS: {json.dumps(server_statistics or {}, indent=2, default=str)}
 
-            SERVER STATISTICS:
-            {json.dumps(server_statistics or {}, indent=2, default=str)}
-
-            CURRENT METRICS:
-            {json.dumps(current_metrics or {}, indent=2, default=str)}
-
-            Based on this information, recommend the most appropriate actions to take. 
-            CRITICAL: Only recommend actions from the ASSIGNED ACTION IDs list.
-            Remember PROBE MODE rules: If server is healthy, max 1 GET action or 0 if data sufficient."""
+CURRENT METRICS: {json.dumps(current_metrics or {}, indent=2, default=str)}"""
             
             # Call OpenAI API
             response = self.client.chat.completions.create(
