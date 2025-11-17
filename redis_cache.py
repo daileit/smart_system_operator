@@ -1,6 +1,8 @@
 import redis
 import json
 import os
+from datetime import datetime, date
+from decimal import Decimal
 import jsonlog
 import config as env_config
 
@@ -13,6 +15,17 @@ redisPassword = redis_config.get("REDIS_PASSWORD")
 init_default_data = [
     {'role': 'system', 'content': 'Initialize the system with default data'},
 ]
+
+
+class DateTimeEncoder(json.JSONEncoder):
+    """Custom JSON encoder that handles datetime, date, and Decimal objects."""
+    def default(self, obj):
+        if isinstance(obj, (datetime, date)):
+            return obj.isoformat()
+        elif isinstance(obj, Decimal):
+            return float(obj)
+        return super().default(obj)
+
 
 class RedisClient:
     def __init__(self, host=redisHost, port=6379, db=0):
@@ -41,8 +54,8 @@ class RedisClient:
         return self.client.get(key)
 
     def set_json(self, key, value, ttl=None):
-        # Serialize the JSON object and set it in Redis
-        json_value = json.dumps(value)
+        # Serialize the JSON object and set it in Redis with datetime support
+        json_value = json.dumps(value, cls=DateTimeEncoder)
         self.client.set(key, json_value)
         if ttl:
             self.client.expire(key, ttl)
@@ -53,8 +66,8 @@ class RedisClient:
         return json.loads(json_value) if json_value else None
 
     def set_json_list(self, key, values):
-        # Serialize the list of JSON objects and set it in Redis
-        json_values = json.dumps(values)
+        # Serialize the list of JSON objects and set it in Redis with datetime support
+        json_values = json.dumps(values, cls=DateTimeEncoder)
         self.client.set(key, json_values)
 
     def get_json_list(self, key):
