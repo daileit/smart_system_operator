@@ -413,86 +413,24 @@ class ServerManager:
             self.logger.error(f"Error getting servers with action: {e}")
             return []
     
-    # ===== Execution Logging (removed - handled by cron.py) =====
-    
-    def get_execution_logs(self, server_id: Optional[int] = None,
-                          action_id: Optional[int] = None,
-                          execution_type: Optional[str] = None,
-                          limit: int = 100) -> List[Dict[str, Any]]:
+    def is_action_automatic(self, server_id: int, action_id: int) -> bool:
         """
-        Get execution logs with optional filters.
-        
-        Args:
-            server_id: Filter by server ID
-            action_id: Filter by action ID
-            execution_type: Filter by execution type ('executed' or 'recommended')
-            limit: Maximum number of logs to return
-            
-        Returns:
-            List of execution log dictionaries
-        """
-        try:
-            query = """
-                SELECT el.*, s.name as server_name, s.ip_address, 
-                       a.action_name, a.action_type
-                FROM execution_logs el
-                JOIN servers s ON el.server_id = s.id
-                JOIN actions a ON el.action_id = a.id
-                WHERE 1=1
-            """
-            params = []
-            
-            if server_id:
-                query += " AND el.server_id = %s"
-                params.append(server_id)
-            
-            if action_id:
-                query += " AND el.action_id = %s"
-                params.append(action_id)
-            
-            if execution_type:
-                query += " AND el.execution_type = %s"
-                params.append(execution_type)
-            
-            query += " ORDER BY el.executed_at DESC LIMIT %s"
-            params.append(limit)
-            
-            logs = self.db.execute_query(query, tuple(params))
-            return logs
-            
-        except Exception as e:
-            self.logger.error(f"Error getting execution logs: {e}")
-            return []
-    
-    def get_server_statistics(self, server_id: int) -> Dict[str, Any]:
-        """
-        Get execution statistics for a server.
+        Check if action is configured for automatic execution on a server.
         
         Args:
             server_id: Server ID
+            action_id: Action ID
             
         Returns:
-            Dictionary with execution statistics
+            True if automatic, False otherwise
         """
         try:
-            stats = self.db.fetch_one(
-                """
-                SELECT 
-                    COUNT(*) as total_executions,
-                    SUM(CASE WHEN execution_type = 'executed' THEN 1 ELSE 0 END) as executed_count,
-                    SUM(CASE WHEN execution_type = 'recommended' THEN 1 ELSE 0 END) as recommended_count,
-                    SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) as success_count,
-                    SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) as failed_count,
-                    AVG(CASE WHEN execution_time IS NOT NULL THEN execution_time ELSE NULL END) as avg_execution_time,
-                    MAX(executed_at) as last_execution
-                FROM execution_logs
-                WHERE server_id = %s
-                """,
-                (server_id,)
+            result = self.db.fetch_one(
+                "SELECT automatic FROM server_allowed_actions WHERE server_id = %s AND action_id = %s",
+                (server_id, action_id)
             )
-            
-            return stats or {}
-            
+            return result['automatic'] if result else False
         except Exception as e:
-            self.logger.error(f"Error getting server statistics: {e}")
-            return {}
+            self.logger.error(f"Error checking automatic flag: {e}")
+            return False
+

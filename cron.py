@@ -19,6 +19,11 @@ from openai_client import OpenAIClient
 logger = jsonlog.setup_logger("cron")
 
 
+def _get_metrics_key(server_id: int) -> str:
+    """Get Redis key for server metrics queue."""
+    return f"server_metrics:{server_id}"
+
+
 class MetricsCrawler:
     """Crawls server metrics using command_get actions."""
     
@@ -38,28 +43,20 @@ class MetricsCrawler:
             'get_memory_usage'
         ]
     
-    def _get_metrics_key(self, server_id: int) -> str:
-        """Get Redis key for server metrics queue."""
-        return f"server_metrics:{server_id}"
-    
     async def _collect_server_metrics(self, server: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """Collect get metrics for a single server."""
         server_id = server['id']
         server_name = server['name']
         
         try:
-            # Get server's allowed CPU and RAM monitoring actions only
-            allowed_actions = self.db.execute_query(
-                """
-                SELECT a.action_name, a.id as action_id
-                FROM actions a
-                JOIN server_allowed_actions saa ON a.id = saa.action_id
-                WHERE saa.server_id = %s 
-                  AND a.action_type = 'command_get' 
-                  AND a.is_active = 1
-                """,
-                (server_id,)
+            # Get server's allowed command_get actions using ServerManager
+            allowed_actions = self.server_manager.get_server_actions(
+                server_id=server_id,
+                automatic_only=False
             )
+            
+            # Filter for command_get actions only
+            allowed_actions = [a for a in allowed_actions if a.get('action_type') == 'command_get']
             
             if not allowed_actions:
                 return None
@@ -74,7 +71,7 @@ class MetricsCrawler:
             # Collect basic metrics (CPU & RAM only)
             for action in allowed_actions:
                 action_name = action['action_name']
-                action_id = action['action_id']
+                action_id = action['id']
                 
                 try:
                     logger.debug(f"Collecting {action_name} for {server_name}")
@@ -121,7 +118,7 @@ class MetricsCrawler:
                 metrics = await self._collect_server_metrics(server)
                 
                 if metrics and metrics['data']:
-                    key = self._get_metrics_key(server['id'])
+                    key = _get_metrics_key(server['id'])
                     self.redis.append_json_list_with_limit(
                         key=key,
                         value=metrics,
@@ -179,10 +176,6 @@ class AIAnalyzer:
         self.task = None
         self.max_metrics_per_analysis = 5
     
-    def _get_metrics_key(self, server_id: int) -> str:
-        """Get Redis key for server metrics queue."""
-        return f"server_metrics:{server_id}"
-    
     def _get_historical_analysis(self, server_id: int, limit: int = 2) -> List[Dict[str, Any]]:
         """Get last N AI analysis results for historical context."""
         try:
@@ -218,7 +211,7 @@ class AIAnalyzer:
     def _get_server_context(self, server_id: int) -> Dict[str, Any]:
         """Get all context data for a server (metrics, logs, stats)."""
         # Get metrics from Redis
-        key = self._get_metrics_key(server_id)
+        key = _get_metrics_key(server_id)
         metrics_list = self.redis.get_json_list(key)
         recent_metrics = metrics_list[:self.max_metrics_per_analysis] if metrics_list else []
         
@@ -304,18 +297,6 @@ class AIAnalyzer:
         except Exception as e:
             self.logger.error(f"Error logging execution: {e}")
     
-    def _is_action_automatic(self, server_id: int, action_id: int) -> bool:
-        """Check if action is configured for automatic execution."""
-        try:
-            result = self.db.fetch_one(
-                "SELECT automatic FROM server_allowed_actions WHERE server_id = %s AND action_id = %s",
-                (server_id, action_id)
-            )
-            return result['automatic'] if result else False
-        except Exception as e:
-            self.logger.error(f"Error checking automatic flag: {e}")
-            return False
-    
     async def _execute_and_store_get_action(self, server: Dict[str, Any], 
                                            action_rec: Dict[str, Any], 
                                            analysis_id: int) -> Optional[Dict[str, Any]]:
@@ -360,7 +341,7 @@ class AIAnalyzer:
         # Handle command_execute actions - check approval and automatic flag
         elif action_type == 'command_execute':
             # Check if low/medium risk and automatic
-            if self._is_action_automatic(server_id, action_id):
+            if self.server_manager.is_action_automatic(server_id, action_id):
                 result = self.action_manager.execute_action(
                     action_id=action_id,
                     server_info=server,
@@ -447,7 +428,7 @@ class AIAnalyzer:
             
             # Add AI-requested metrics to Redis
             if additional_metrics:
-                key = self._get_metrics_key(server_id)
+                key = _get_metrics_key(server_id)
                 current_metrics = self.redis.get_json_list(key) or []
                 
                 new_metric = {
@@ -465,7 +446,7 @@ class AIAnalyzer:
                 self.redis.set_json_list(key, current_metrics)
             
             # Remove consumed metrics
-            key = self._get_metrics_key(server_id)
+            key = _get_metrics_key(server_id)
             remaining = (self.redis.get_json_list(key) or [])[self.max_metrics_per_analysis:]
             
             if remaining:
@@ -485,7 +466,7 @@ class AIAnalyzer:
             
             analyzed = 0
             for server in servers:
-                if self.redis.exists(self._get_metrics_key(server['id'])):
+                if self.redis.exists(_get_metrics_key(server['id'])):
                     await self._analyze_server(server['id'])
                     analyzed += 1
             
