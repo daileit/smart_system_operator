@@ -285,17 +285,16 @@ class AIAnalyzer:
                 )
             else:
                 # Recommendation: store reasoning and details, return ID
-                cursor = self.db.execute_update(
+                affected_rows, last_id = self.db.execute_update(
                     """
                     INSERT INTO execution_logs 
                     (server_id, action_id, execution_type, ai_reasoning, execution_details, status)
                     VALUES (%s, %s, %s, %s, %s, %s)
                     """,
                     (server_id, action_id, execution_type, reasoning, 
-                     json.dumps(action_data), status),
-                    return_lastrowid=True
+                     json.dumps(action_data), status)
                 )
-                return cursor  # Return recommendation ID for executions to reference
+                return last_id  # Return recommendation ID for executions to reference
         except Exception as e:
             self.logger.error(f"Error logging action: {e}")
             return None
