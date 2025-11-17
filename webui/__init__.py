@@ -9,6 +9,7 @@ from .dashboard_page import dashboard_page
 from .users_page import users_page
 from .settings_page import settings_page
 from .servers_page import servers_page
+from .reports_page import reports_page
 
 __all__ = [
     'login_page',
@@ -16,5 +17,6 @@ __all__ = [
     'dashboard_page',
     'users_page',
     'settings_page',
-    'servers_page'
+    'servers_page',
+    'reports_page'
 ]

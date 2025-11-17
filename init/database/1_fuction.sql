@@ -104,13 +104,14 @@ CREATE TABLE IF NOT EXISTS execution_logs (
 
 -- ===== COMMAND EXECUTE ACTIONS =====
 INSERT IGNORE INTO actions (action_name, action_type, description) VALUES
-('reboot_system', 'command_execute', 'Reboot the server system immediately. Use when system is unresponsive or after critical updates. HIGH RISK - causes downtime.'),
+('reboot_system', 'command_execute', 'Reboot the server system immediately. Use when system is unresponsive or after critical updates. MEDIUM RISK - causes downtime.'),
 ('restart_service', 'command_execute', 'Restart a specific systemd service. Useful for applying configuration changes or recovering from service failures. MEDIUM RISK - brief service interruption.'),
 ('stop_service', 'command_execute', 'Stop a specific systemd service. Use to halt misbehaving services or for maintenance. MEDIUM RISK - service becomes unavailable.'),
 ('start_service', 'command_execute', 'Start a specific systemd service. Use to bring services online after maintenance or failures. LOW RISK - restores service availability.'),
 ('block_ip_firewalld', 'command_execute', 'Block a specific IP address using firewalld. Use to prevent access from malicious or problematic IPs. MEDIUM RISK - may block legitimate traffic.'),
 ('unblock_ip_firewalld', 'command_execute', 'Unblock a previously blocked IP address using firewalld. Use to restore access after resolving issues. LOW RISK - restores access.'),
 ('kill_process', 'command_execute', 'Terminate processes matching a specific name pattern. Use to stop runaway or problematic processes. HIGH RISK - may kill critical processes.'),
+('cleanup_log_files', 'command_execute', 'Remove log files older than specified days. Use to free up disk space and maintain system cleanliness. LOW RISK - removes old log files.'),
 ('cleanup_temp_files', 'command_execute', 'Remove temporary files older than specified days. Use to free up disk space and maintain system cleanliness. LOW RISK - removes old temp files.');
 
 INSERT IGNORE INTO command_configs (action_id, command_template, timeout_seconds) VALUES
@@ -121,6 +122,7 @@ INSERT IGNORE INTO command_configs (action_id, command_template, timeout_seconds
 ((SELECT id FROM actions WHERE action_name = 'block_ip_firewalld'), 'sudo firewall-cmd --permanent --add-rich-rule="rule family=ipv4 source address=${ip_address} drop" && sudo firewall-cmd --reload', 15),
 ((SELECT id FROM actions WHERE action_name = 'unblock_ip_firewalld'), 'sudo firewall-cmd --permanent --remove-rich-rule="rule family=ipv4 source address=${ip_address} drop" && sudo firewall-cmd --reload', 15),
 ((SELECT id FROM actions WHERE action_name = 'kill_process'), 'sudo pkill -f ${process_name}', 10),
+((SELECT id FROM actions WHERE action_name = 'cleanup_log_files'), 'sudo find /var/log -type f -mtime +${days} -delete', 20),
 ((SELECT id FROM actions WHERE action_name = 'cleanup_temp_files'), 'sudo find /tmp -type f -mtime +${days} -delete', 20);
 
 -- ===== COMMAND GET ACTIONS =====

@@ -7,7 +7,7 @@ import config as env_config
 from cron import CronManager
 
 # Import webui pages
-from webui import login_page, main_page, dashboard_page, users_page, settings_page, servers_page
+from webui import login_page, main_page, dashboard_page, users_page, settings_page, servers_page, reports_page
 
 app_config = env_config.Config(group="APP")
 
