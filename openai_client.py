@@ -156,7 +156,7 @@ class OpenAIClient:
         1. Safety first - avoid high-risk actions unless critical
         2. Be CREATIVE and INSIGHTFUL - avoid repetitive patterns, boring analysis
         3. Use Vietnamese - make it engaging, not robotic
-        4. Only recommend actions from assigned_action_ids list
+        4. Only recommend actions from assigned_action_ids or available_actions list
 
         ACTION TYPES:
         - command_get: Info gathering (executes immediately, results in next cycle)
@@ -178,16 +178,16 @@ class OpenAIClient:
 
         ANALYSIS STYLE:
         - Be observant and pattern-seeking, not just metric-reporting
-        - Vary your vocabulary - avoid phrases like "tình trạng bình thường", "cần theo dõi", "khuyến nghị"
+        - Vary your vocabulary - avoid repetitive phrases
         - Think like a system architect, not a checkbox ticker
         - Notice trends, anomalies, correlations - be insightful
-        - If nothing interesting to say, don't be afraid to get one probe request
+        - If nothing interesting to say, don't be afraid to get a random probe request using available_actions
 
         REASONING FORMAT:
-        - Overall: 1-2 sentences max, direct and insightful
+        - Overall: 1-3 sentences max, direct and insightful
         - Per-action: 1 sentence, specific and purposeful
         - Example: "CPU ổn định 45%, RAM 60% - hệ thống khỏe, không cần thêm data" (healthy)
-        - Example: "CPU ổn định - RAM dư - hệ thống khỏe toàn diện, đã lâu không check nên sẽ get data diskspace" (probe)
+        - Example: "Hệ thống ổn định, đã lâu không check nên sẽ check diskspace" (probe)
         - Example: "CPU nhảy vọt 89% bất thường - kiểm tra processes để tìm nguyên nhân" (problem)
 
         OUTPUT JSON:
@@ -233,7 +233,7 @@ class OpenAIClient:
 
             AVAILABLE ACTIONS: {json.dumps(available_actions, indent=2, default=str)}
 
-            RECENT LOGS: {json.dumps(execution_logs or [], indent=2, default=str)}
+            YOUR EXECUTED ACTIONS' LOG: {json.dumps(execution_logs or [], indent=2, default=str)}
 
             STATISTICS: {json.dumps(server_statistics or {}, indent=2, default=str)}
 

@@ -173,7 +173,7 @@ class AIAnalyzer:
         self.logger = logger
         self.running = False
         self.task = None
-        self.max_metrics_per_analysis = 5
+        self.max_metrics_per_analysis = 4
     
     def _get_historical_analysis(self, server_id: int, limit: int = 2) -> List[Dict[str, Any]]:
         """Get last N AI analysis results for historical context."""
@@ -198,7 +198,7 @@ class AIAnalyzer:
                         'reasoning': row.get('reasoning', ''),
                         'confidence': float(row.get('confidence', 0)),
                         'risk_level': row.get('risk_level', 'unknown'),
-                        'recommended_actions': recommended_actions or []
+                        'recommended_actions': recommended_actions[0].pop('reasoning') if isinstance(recommended_actions, list) and recommended_actions else []
                     })
                 except Exception as e:
                     self.logger.warning(f"Error parsing historical analysis: {e}")
