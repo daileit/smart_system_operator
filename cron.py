@@ -225,7 +225,7 @@ class AIAnalyzer:
             LEFT JOIN actions a ON el.action_id = a.id
             WHERE el.server_id = %s
             ORDER BY el.executed_at DESC
-            LIMIT 10
+            LIMIT 3
             """,
             (server_id,)
         )

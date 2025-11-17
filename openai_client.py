@@ -225,14 +225,6 @@ class OpenAIClient:
             if assigned_action_ids is None:
                 assigned_action_ids = [a['id'] for a in available_actions]
             
-            # Build context for AI
-            context = self._build_context(
-                server_info, 
-                available_actions, 
-                execution_logs, 
-                server_statistics,
-                current_metrics
-            )
             
             # Create user message with assigned actions info
             user_message = f"""SERVER: {json.dumps(server_info, indent=2, default=str)}
