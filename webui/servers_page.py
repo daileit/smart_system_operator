@@ -36,13 +36,10 @@ def servers_page():
     
     # Initialize Managers
     server_manager = servers_module.ServerManager(db_client, redis_client)
-    action_manager = action_module.ActionManager(db_client)
+    action_manager = action_module.ActionManager(db_client, redis_client)
     
     # Load all available actions
     available_actions = action_manager.get_all_actions()
-    action_options = {action['id']: f"{action['action_name']} ({action['action_type']})" 
-                     for action in available_actions}
-    
     # Header
     with ui.header().classes('items-center justify-between bg-primary text-white'):
         with ui.row().classes('items-center gap-4'):
@@ -348,18 +345,23 @@ def servers_page():
                                 auto_switch.set_enabled(is_assigned)
                             
                             # Update action_configs on changes
-                            def on_enable_change(e, aid=action['id'], auto_sw=auto_switch):
-                                action_configs[aid]['enabled'] = e.value
-                                auto_sw.set_enabled(e.value)
-                                if not e.value:
-                                    action_configs[aid]['automatic'] = False
-                                    auto_sw.value = False
+                            # Use default parameters to capture current values in closure
+                            def make_handlers(action_id, switch):
+                                def on_enable_change(e):
+                                    action_configs[action_id]['enabled'] = e.value
+                                    switch.set_enabled(e.value)
+                                    if not e.value:
+                                        action_configs[action_id]['automatic'] = False
+                                        switch.value = False
+                                
+                                def on_auto_change(e):
+                                    action_configs[action_id]['automatic'] = e.value
+                                
+                                return on_enable_change, on_auto_change
                             
-                            def on_auto_change(e, aid=action['id']):
-                                action_configs[aid]['automatic'] = e.value
-                            
-                            enable_check.on_value_change(on_enable_change)
-                            auto_switch.on_value_change(on_auto_change)
+                            enable_handler, auto_handler = make_handlers(action['id'], auto_switch)
+                            enable_check.on_value_change(enable_handler)
+                            auto_switch.on_value_change(auto_handler)
             
             # Get Information section
             with ui.expansion('Get Information (Read-Only Operations)', icon='info') \
@@ -390,18 +392,23 @@ def servers_page():
                                 auto_switch.set_enabled(is_assigned)
                             
                             # Update action_configs on changes
-                            def on_enable_change(e, aid=action['id'], auto_sw=auto_switch):
-                                action_configs[aid]['enabled'] = e.value
-                                auto_sw.set_enabled(e.value)
-                                if not e.value:
-                                    action_configs[aid]['automatic'] = False
-                                    auto_sw.value = False
+                            # Use default parameters to capture current values in closure
+                            def make_handlers(action_id, switch):
+                                def on_enable_change(e):
+                                    action_configs[action_id]['enabled'] = e.value
+                                    switch.set_enabled(e.value)
+                                    if not e.value:
+                                        action_configs[action_id]['automatic'] = False
+                                        switch.value = False
+                                
+                                def on_auto_change(e):
+                                    action_configs[action_id]['automatic'] = e.value
+                                
+                                return on_enable_change, on_auto_change
                             
-                            def on_auto_change(e, aid=action['id']):
-                                action_configs[aid]['automatic'] = e.value
-                            
-                            enable_check.on_value_change(on_enable_change)
-                            auto_switch.on_value_change(on_auto_change)
+                            enable_handler, auto_handler = make_handlers(action['id'], auto_switch)
+                            enable_check.on_value_change(enable_handler)
+                            auto_switch.on_value_change(auto_handler)
             
             # HTTP Requests section
             if http_actions:
@@ -433,18 +440,23 @@ def servers_page():
                                     auto_switch.set_enabled(is_assigned)
                                 
                                 # Update action_configs on changes
-                                def on_enable_change(e, aid=action['id'], auto_sw=auto_switch):
-                                    action_configs[aid]['enabled'] = e.value
-                                    auto_sw.set_enabled(e.value)
-                                    if not e.value:
-                                        action_configs[aid]['automatic'] = False
-                                        auto_sw.value = False
+                                # Use default parameters to capture current values in closure
+                                def make_handlers(action_id, switch):
+                                    def on_enable_change(e):
+                                        action_configs[action_id]['enabled'] = e.value
+                                        switch.set_enabled(e.value)
+                                        if not e.value:
+                                            action_configs[action_id]['automatic'] = False
+                                            switch.value = False
+                                    
+                                    def on_auto_change(e):
+                                        action_configs[action_id]['automatic'] = e.value
+                                    
+                                    return on_enable_change, on_auto_change
                                 
-                                def on_auto_change(e, aid=action['id']):
-                                    action_configs[aid]['automatic'] = e.value
-                                
-                                enable_check.on_value_change(on_enable_change)
-                                auto_switch.on_value_change(on_auto_change)
+                                enable_handler, auto_handler = make_handlers(action['id'], auto_switch)
+                                enable_check.on_value_change(enable_handler)
+                                auto_switch.on_value_change(auto_handler)
             
             ui.separator().classes('my-4')
             

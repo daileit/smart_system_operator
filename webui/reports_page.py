@@ -4,10 +4,13 @@ Analytics, charts, and export functionality for system insights.
 """
 
 from nicegui import ui
-from .shared import APP_TITLE, APP_LOGO_PATH, user_session, db_client
+from .shared import APP_TITLE, APP_LOGO_PATH, user_session, db_client, redis_client
+from servers import ServerManager
 from datetime import datetime, timedelta
 from typing import Optional, Dict, List, Any
 import json
+import csv
+import io
 
 
 @ui.page('/reports')
@@ -70,6 +73,9 @@ def reports_page():
             ui.label('Database connection unavailable').classes('text-h5 text-red-500')
         return
     
+    # Initialize managers
+    server_manager = ServerManager(db_client, redis_client) if db_client else None
+    
     # State management
     state = {
         'time_range': '7d',
@@ -82,8 +88,10 @@ def reports_page():
     # Data fetching functions
     def get_servers_list():
         """Get all servers for filter."""
-        result = db_client.execute_query("SELECT id, name FROM servers ORDER BY name")
-        return result or []
+        if not server_manager:
+            return []
+        servers = server_manager.get_all_servers(include_actions=False)
+        return [{'id': s['id'], 'name': s['name']} for s in servers]
     
     def get_overview_stats(date_from: str, date_to: str, server_id: Optional[int] = None):
         """Get high-level overview statistics."""
