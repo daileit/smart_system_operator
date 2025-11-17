@@ -132,10 +132,10 @@ INSERT IGNORE INTO actions (action_name, action_type, description) VALUES
 ('get_cpu_usage', 'command_get', 'Get current CPU usage percentage across all cores. Safe performance monitoring.'),
 ('get_memory_usage', 'command_get', 'Get current memory usage percentage including used and available memory. Safe resource monitoring.'),
 ('get_failed_services', 'command_get', 'List all systemd services that are in failed state. Safe service health monitoring.'),
+('get_system_load', 'command_get', 'Get system load averages for 1, 5, and 15 minute intervals. Safe system health check.'),
+('get_uptime', 'command_get', 'Get system uptime and boot time information. Safe system information gathering.'),
 ('get_top_processes', 'command_get', 'Get top CPU and memory consuming processes. Safe resource usage analysis.');
 -- ('get_network_connections', 'command_get', 'Show active network connections on a specific port including connection states. Safe network monitoring.'),
--- ('get_system_load', 'command_get', 'Get system load averages for 1, 5, and 15 minute intervals. Safe system health check.'),
--- ('get_uptime', 'command_get', 'Get system uptime and boot time information. Safe system information gathering.'),
 -- ('get_process_list', 'command_get', 'List all running processes matching a specific name pattern with resource usage. Safe process monitoring.'),
 
 INSERT IGNORE INTO command_configs (action_id, command_template, timeout_seconds) VALUES
@@ -144,6 +144,8 @@ INSERT IGNORE INTO command_configs (action_id, command_template, timeout_seconds
 ((SELECT id FROM actions WHERE action_name = 'get_cpu_usage'), 'top -bn1 | grep "Cpu(s)" | sed "s/.*, *\\([0-9.]*\\)%* id.*/\\1/" | awk \'{print 100 - $1"%"}\'', 5),
 ((SELECT id FROM actions WHERE action_name = 'get_memory_usage'), 'free -m | awk \'NR==2{printf "Memory Usage: %s/%sMB (%.2f%%)", $3,$2,$3*100/$2 }\'', 5),
 ((SELECT id FROM actions WHERE action_name = 'get_failed_services'), 'sudo systemctl list-units --state=failed --no-pager', 10),
+((SELECT id FROM actions WHERE action_name = 'get_system_load'), 'uptime', 5),
+((SELECT id FROM actions WHERE action_name = 'get_uptime'), 'uptime -p && uptime -s', 5),
 ((SELECT id FROM actions WHERE action_name = 'get_top_processes'), 'ps aux --sort=-%cpu | head -10', 5);
 -- ((SELECT id FROM actions WHERE action_name = 'get_process_list'), 'ps aux | grep ${process_name} | grep -v grep', 5),
 -- ((SELECT id FROM actions WHERE action_name = 'get_network_connections'), 'ss -tuln | grep ${port}', 5),

@@ -187,7 +187,7 @@ class OpenAIClient:
         - Overall: 1-3 sentences max, direct and insightful
         - Per-action: 1 sentence, specific and purposeful
         - Example: "CPU ổn định 45%, RAM 60% - hệ thống khỏe, không cần thêm data" (healthy)
-        - Example: "Hệ thống ổn định, đã lâu không check nên sẽ check diskspace" (probe)
+        - Example: "Hệ thống ổn định, đã lâu không check nên sẽ check diskspace hoặc network throughput" (probe)
         - Example: "CPU nhảy vọt 89% bất thường - kiểm tra processes để tìm nguyên nhân" (problem)
 
         OUTPUT JSON:
