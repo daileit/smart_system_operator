@@ -289,37 +289,42 @@ class AIAnalyzer:
     
     def _log_action(self, server_id: int, action_id: int, execution_type: str,
                    reasoning: str, action_data: Dict[str, Any], 
-                   result: Optional[Any] = None, status: str = 'recommended'):
+                   result: Optional[Any] = None, status: str = 'recommended',
+                   recommendation_id: Optional[int] = None):
         """Log an action to database."""
         try:
             if execution_type == 'executed':
+                # Execution: store result and reference to recommendation
                 self.db.execute_update(
                     """
                     INSERT INTO execution_logs 
-                    (server_id, action_id, execution_type, ai_reasoning, execution_details, 
+                    (server_id, action_id, execution_type, recommendation_id,
                      execution_result, status, execution_time)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s)
                     """,
                     (
-                        server_id, action_id, execution_type, reasoning,
-                        json.dumps(action_data),
+                        server_id, action_id, execution_type, recommendation_id,
                         result.output if result else None,
                         'success' if (result and result.success) else 'failed',
                         result.execution_time if result else None
                     )
                 )
             else:
-                self.db.execute_update(
+                # Recommendation: store reasoning and details, return ID
+                cursor = self.db.execute_update(
                     """
                     INSERT INTO execution_logs 
                     (server_id, action_id, execution_type, ai_reasoning, execution_details, status)
                     VALUES (%s, %s, %s, %s, %s, %s)
                     """,
                     (server_id, action_id, execution_type, reasoning, 
-                     json.dumps(action_data), status)
+                     json.dumps(action_data), status),
+                    return_lastrowid=True
                 )
+                return cursor  # Return recommendation ID for executions to reference
         except Exception as e:
             self.logger.error(f"Error logging action: {e}")
+            return None
     
     def _is_action_automatic(self, server_id: int, action_id: int) -> bool:
         """Check if action is configured for automatic execution."""
@@ -335,7 +340,8 @@ class AIAnalyzer:
     
     async def _execute_and_store_get_action(self, server: Dict[str, Any], 
                                            action_rec: Dict[str, Any], 
-                                           reasoning: str) -> Optional[Dict[str, Any]]:
+                                           reasoning: str,
+                                           recommendation_id: Optional[int] = None) -> Optional[Dict[str, Any]]:
         """Execute a get action and return results for AI context."""
         action_id = action_rec.get('action_id')
         action_name = action_rec.get('action_name', 'unknown')
@@ -352,8 +358,9 @@ class AIAnalyzer:
                 params=parameters
             )
             
-            # Log execution
-            self._log_action(server_id, action_id, 'executed', reasoning, action_rec, result)
+            # Log execution with reference to recommendation
+            self._log_action(server_id, action_id, 'executed', reasoning, action_rec, result, 
+                           recommendation_id=recommendation_id)
             
             if result.success:
                 self.logger.info(f"GET action '{action_name}' executed successfully for {server['name']}")
@@ -380,12 +387,12 @@ class AIAnalyzer:
         action_name = action_rec.get('action_name', 'unknown')
         server_id = server['id']
         
-        # Log as recommended
-        self._log_action(server_id, action_id, 'recommended', decision.reasoning, action_rec)
+        # Log as recommended and capture recommendation_id
+        rec_id = self._log_action(server_id, action_id, 'recommended', decision.reasoning, action_rec)
         
         # Handle command_get actions - always execute regardless of approval
         if action_type == 'command_get':
-            return await self._execute_and_store_get_action(server, action_rec, decision.reasoning)
+            return await self._execute_and_store_get_action(server, action_rec, decision.reasoning, rec_id)
         
         # Handle command_execute actions - check approval and automatic flag
         elif action_type == 'command_execute':
@@ -401,7 +408,9 @@ class AIAnalyzer:
                         params=action_rec.get('parameters', {})
                     )
                     
-                    self._log_action(server_id, action_id, 'executed', decision.reasoning, action_rec, result)
+                    # Log execution with reference to recommendation
+                    self._log_action(server_id, action_id, 'executed', decision.reasoning, 
+                                   action_rec, result, recommendation_id=rec_id)
                     
                     self.logger.info(
                         f"Auto-executed action '{action_name}' for {server['name']}: "

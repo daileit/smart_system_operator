@@ -73,19 +73,22 @@ CREATE TABLE IF NOT EXISTS execution_logs (
     server_id INT NOT NULL,
     action_id INT NOT NULL,
     execution_type ENUM('executed', 'recommended') NOT NULL, -- executed = actually ran, recommended = AI suggested only
-    ai_reasoning TEXT, -- AI's reasoning for this action
-    execution_details TEXT, -- Command/request details
-    execution_result TEXT, -- Response/output (NULL for recommendations)
+    recommendation_id INT NULL, -- For executions: references the recommendation that triggered it. For recommendations: NULL
+    ai_reasoning TEXT, -- AI's reasoning for this action (only for recommendations)
+    execution_details TEXT, -- Command/request details (only for recommendations)
+    execution_result TEXT, -- Response/output (only for executions)
     status ENUM('success', 'failed', 'timeout', 'recommended') NOT NULL,
     error_message TEXT,
     execution_time DECIMAL(8,3), -- NULL for recommendations
     executed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (server_id) REFERENCES servers(id),
     FOREIGN KEY (action_id) REFERENCES actions(id),
+    FOREIGN KEY (recommendation_id) REFERENCES execution_logs(id) ON DELETE SET NULL,
     INDEX idx_server_date (server_id, executed_at),
     INDEX idx_action_date (action_id, executed_at),
     INDEX idx_execution_type (execution_type),
-    INDEX idx_status_date (status, executed_at)
+    INDEX idx_status_date (status, executed_at),
+    INDEX idx_recommendation_id (recommendation_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ===== COMMAND EXECUTE ACTIONS =====

@@ -158,16 +158,28 @@ def dashboard_page():
         return 0.0
     
     def get_ai_recommendations(server_id: int):
-        """Get AI recommendations for a server from execution_logs."""
+        """Get AI recommendations with their executions using JOIN on recommendation_id."""
         if not db_client:
             return []
         
         logs = db_client.execute_query(
             """
-            SELECT ai_reasoning, execution_details, executed_at, status, action_id, execution_type
-            FROM execution_logs
-            WHERE server_id = %s AND (execution_type = 'recommended' OR execution_type = 'executed')
-            ORDER BY executed_at DESC
+            SELECT 
+                r.id as rec_id,
+                r.ai_reasoning,
+                r.execution_details,
+                r.executed_at as rec_time,
+                r.status as rec_status,
+                r.action_id,
+                e.id as exec_id,
+                e.execution_result,
+                e.status as exec_status,
+                e.execution_time,
+                e.executed_at as exec_time
+            FROM execution_logs r
+            LEFT JOIN execution_logs e ON e.recommendation_id = r.id
+            WHERE r.server_id = %s AND r.execution_type = 'recommended'
+            ORDER BY r.executed_at DESC
             LIMIT 50
             """,
             (server_id,)
@@ -176,46 +188,37 @@ def dashboard_page():
         return logs or []
     
     def group_ai_recommendations(recommendations):
-        """Group recommendations with their executions."""
+        """Group recommendations with their executions from JOIN result."""
         grouped = []
         rec_map = {}
         
-        for rec in recommendations:
-            rec_type = rec.get('execution_type')
-            action_id = rec.get('action_id')
-            timestamp = rec.get('executed_at')
+        for row in recommendations:
+            rec_id = row.get('rec_id')
             
-            if rec_type == 'recommended':
-                # This is a recommendation
-                key = f"{action_id}_{timestamp}"
-                rec_map[key] = {
-                    'recommendation': rec,
+            # Add recommendation if not seen yet
+            if rec_id not in rec_map:
+                rec_map[rec_id] = {
+                    'recommendation': {
+                        'id': rec_id,
+                        'ai_reasoning': row.get('ai_reasoning'),
+                        'execution_details': row.get('execution_details'),
+                        'executed_at': row.get('rec_time'),
+                        'status': row.get('rec_status'),
+                        'action_id': row.get('action_id')
+                    },
                     'executions': []
                 }
-                grouped.append(rec_map[key])
-            elif rec_type == 'executed':
-                # This is an execution - try to find its recommendation
-                # Look for recommendation within 5 minutes before this execution
-                found = False
-                for group in grouped:
-                    if not group['recommendation']:
-                        continue
-                    
-                    if group['recommendation'].get('action_id') == action_id:
-                        rec_time = group['recommendation'].get('executed_at')
-                        exec_time = timestamp
-                        # If execution is within 5 minutes of recommendation
-                        if rec_time and exec_time and (exec_time - rec_time).total_seconds() < 300:
-                            group['executions'].append(rec)
-                            found = True
-                            break
-                
-                # If no matching recommendation found, treat as standalone execution
-                if not found:
-                    grouped.append({
-                        'recommendation': None,
-                        'executions': [rec]
-                    })
+                grouped.append(rec_map[rec_id])
+            
+            # Add execution if exists
+            if row.get('exec_id'):
+                rec_map[rec_id]['executions'].append({
+                    'id': row.get('exec_id'),
+                    'execution_result': row.get('execution_result'),
+                    'status': row.get('exec_status'),
+                    'execution_time': row.get('execution_time'),
+                    'executed_at': row.get('exec_time')
+                })
         
         return grouped
     
