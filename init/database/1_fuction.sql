@@ -67,28 +67,39 @@ CREATE TABLE IF NOT EXISTS server_allowed_actions (
     INDEX idx_action_auto (action_id, automatic)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- ===== EXECUTION LOGS TABLE (WITH EXECUTION TYPE) =====
+-- ===== AI ANALYSIS TABLE =====
+CREATE TABLE IF NOT EXISTS ai_analysis (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    server_id INT NOT NULL,
+    reasoning TEXT NOT NULL, -- AI's analysis/observation
+    confidence DECIMAL(3,2), -- 0.00 to 1.00
+    risk_level ENUM('low', 'medium', 'high') NOT NULL,
+    requires_approval BOOLEAN DEFAULT FALSE,
+    recommended_actions JSON, -- Array of recommended action details
+    analyzed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (server_id) REFERENCES servers(id) ON DELETE CASCADE,
+    INDEX idx_server_date (server_id, analyzed_at),
+    INDEX idx_risk_date (risk_level, analyzed_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ===== EXECUTION LOGS TABLE =====
 CREATE TABLE IF NOT EXISTS execution_logs (
     id INT PRIMARY KEY AUTO_INCREMENT,
     server_id INT NOT NULL,
-    action_id INT NULL, -- NULL for observation-only analysis (no action recommended)
-    execution_type ENUM('executed', 'recommended', 'analyzed') NOT NULL, -- executed = actually ran, recommended = AI suggested action, analyzed = observation only
-    recommendation_id INT NULL, -- For executions: references the recommendation that triggered it. For recommendations: NULL
-    ai_reasoning TEXT, -- AI's reasoning for this action (only for recommendations/analyzed)
-    execution_details TEXT, -- Command/request details (only for recommendations)
-    execution_result TEXT, -- Response/output (only for executions)
-    status ENUM('success', 'failed', 'timeout', 'recommended') NOT NULL,
+    action_id INT NOT NULL,
+    analysis_id INT NULL, -- Reference to AI analysis that triggered this (if any)
+    execution_result TEXT, -- Command output
+    status ENUM('success', 'failed', 'timeout') NOT NULL,
     error_message TEXT,
-    execution_time DECIMAL(8,3), -- NULL for recommendations
+    execution_time DECIMAL(8,3),
     executed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (server_id) REFERENCES servers(id),
+    FOREIGN KEY (server_id) REFERENCES servers(id) ON DELETE CASCADE,
     FOREIGN KEY (action_id) REFERENCES actions(id) ON DELETE CASCADE,
-    FOREIGN KEY (recommendation_id) REFERENCES execution_logs(id) ON DELETE SET NULL,
+    FOREIGN KEY (analysis_id) REFERENCES ai_analysis(id) ON DELETE SET NULL,
     INDEX idx_server_date (server_id, executed_at),
     INDEX idx_action_date (action_id, executed_at),
-    INDEX idx_execution_type (execution_type),
     INDEX idx_status_date (status, executed_at),
-    INDEX idx_recommendation_id (recommendation_id)
+    INDEX idx_analysis_id (analysis_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ===== COMMAND EXECUTE ACTIONS =====

@@ -188,12 +188,10 @@ class AIAnalyzer:
         try:
             historical = self.db.execute_query(
                 """
-                SELECT ai_reasoning, execution_details, status, executed_at
-                FROM execution_logs
-                WHERE server_id = %s 
-                  AND execution_type = 'recommended'
-                  AND ai_reasoning IS NOT NULL
-                ORDER BY executed_at DESC
+                SELECT reasoning, confidence, risk_level, recommended_actions, analyzed_at
+                FROM ai_analysis
+                WHERE server_id = %s
+                ORDER BY analyzed_at DESC
                 LIMIT %s
                 """,
                 (server_id, limit)
@@ -202,13 +200,13 @@ class AIAnalyzer:
             results = []
             for row in historical or []:
                 try:
-                    details = json.loads(row['execution_details']) if isinstance(row['execution_details'], str) else row['execution_details']
+                    recommended_actions = json.loads(row['recommended_actions']) if isinstance(row['recommended_actions'], str) else row['recommended_actions']
                     results.append({
-                        'timestamp': row['executed_at'].isoformat() if row.get('executed_at') else 'Unknown',
-                        'reasoning': row.get('ai_reasoning', ''),
-                        'action_name': details.get('action_name', 'Unknown'),
-                        'status': row.get('status', 'unknown'),
-                        'details': details
+                        'timestamp': row['analyzed_at'].isoformat() if row.get('analyzed_at') else 'Unknown',
+                        'reasoning': row.get('reasoning', ''),
+                        'confidence': float(row.get('confidence', 0)),
+                        'risk_level': row.get('risk_level', 'unknown'),
+                        'recommended_actions': recommended_actions or []
                     })
                 except Exception as e:
                     self.logger.warning(f"Error parsing historical analysis: {e}")
@@ -230,11 +228,11 @@ class AIAnalyzer:
         # Get execution logs
         execution_logs = self.db.execute_query(
             """
-            SELECT action_id, execution_type, status, execution_result, 
-                   ai_reasoning, executed_at
-            FROM execution_logs
-            WHERE server_id = %s
-            ORDER BY executed_at DESC
+            SELECT el.*, a.action_name, a.action_type
+            FROM execution_logs el
+            LEFT JOIN actions a ON el.action_id = a.id
+            WHERE el.server_id = %s
+            ORDER BY el.executed_at DESC
             LIMIT 10
             """,
             (server_id,)
@@ -249,7 +247,7 @@ class AIAnalyzer:
                 SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) as failed_executions,
                 AVG(execution_time) as avg_execution_time
             FROM execution_logs
-            WHERE server_id = %s AND execution_type = 'executed'
+            WHERE server_id = %s
             """,
             (server_id,)
         )
@@ -261,43 +259,50 @@ class AIAnalyzer:
             'server_stats': server_stats
         }
     
-    def _log_action(self, server_id: int, action_id: int, execution_type: str,
-                   reasoning: str, action_data: Dict[str, Any], 
-                   result: Optional[Any] = None, status: str = 'recommended',
-                   recommendation_id: Optional[int] = None):
-        """Log an action to database."""
+    def _log_analysis(self, server_id: int, decision) -> Optional[int]:
+        """Log AI analysis to database and return analysis_id."""
         try:
-            if execution_type == 'executed':
-                # Execution: store result and reference to recommendation
-                self.db.execute_update(
-                    """
-                    INSERT INTO execution_logs 
-                    (server_id, action_id, execution_type, recommendation_id,
-                     execution_result, status, execution_time)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s)
-                    """,
-                    (
-                        server_id, action_id, execution_type, recommendation_id,
-                        result.output if result else None,
-                        'success' if (result and result.success) else 'failed',
-                        result.execution_time if result else None
-                    )
+            affected_rows, analysis_id = self.db.execute_update(
+                """
+                INSERT INTO ai_analysis 
+                (server_id, reasoning, confidence, risk_level, requires_approval, recommended_actions)
+                VALUES (%s, %s, %s, %s, %s, %s)
+                """,
+                (
+                    server_id,
+                    decision.reasoning,
+                    decision.confidence,
+                    decision.risk_level,
+                    decision.requires_approval,
+                    json.dumps(decision.recommended_actions)
                 )
-            else:
-                # Recommendation: store reasoning and details, return ID
-                affected_rows, last_id = self.db.execute_update(
-                    """
-                    INSERT INTO execution_logs 
-                    (server_id, action_id, execution_type, ai_reasoning, execution_details, status)
-                    VALUES (%s, %s, %s, %s, %s, %s)
-                    """,
-                    (server_id, action_id, execution_type, reasoning, 
-                     json.dumps(action_data), status)
-                )
-                return last_id  # Return recommendation ID for executions to reference
+            )
+            return analysis_id
         except Exception as e:
-            self.logger.error(f"Error logging action: {e}")
+            self.logger.error(f"Error logging AI analysis: {e}")
             return None
+    
+    def _log_execution(self, server_id: int, action_id: int, result, analysis_id: Optional[int] = None):
+        """Log action execution to database."""
+        try:
+            self.db.execute_update(
+                """
+                INSERT INTO execution_logs 
+                (server_id, action_id, analysis_id, execution_result, status, error_message, execution_time)
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
+                """,
+                (
+                    server_id,
+                    action_id,
+                    analysis_id,
+                    result.output if result else None,
+                    'success' if (result and result.success) else 'failed',
+                    result.error if (result and not result.success) else None,
+                    result.execution_time if result else None
+                )
+            )
+        except Exception as e:
+            self.logger.error(f"Error logging execution: {e}")
     
     def _is_action_automatic(self, server_id: int, action_id: int) -> bool:
         """Check if action is configured for automatic execution."""
@@ -313,8 +318,7 @@ class AIAnalyzer:
     
     async def _execute_and_store_get_action(self, server: Dict[str, Any], 
                                            action_rec: Dict[str, Any], 
-                                           reasoning: str,
-                                           recommendation_id: Optional[int] = None) -> Optional[Dict[str, Any]]:
+                                           analysis_id: int) -> Optional[Dict[str, Any]]:
         """Execute a get action and return results for AI context."""
         action_id = action_rec.get('action_id')
         action_name = action_rec.get('action_name', 'unknown')
@@ -326,9 +330,8 @@ class AIAnalyzer:
                 params=action_rec.get('parameters', {})
             )
             
-            # Log execution with reference to recommendation
-            self._log_action(server['id'], action_id, 'executed', reasoning, action_rec, result, 
-                           recommendation_id=recommendation_id)
+            # Log execution with reference to analysis
+            self._log_execution(server['id'], action_id, result, analysis_id)
             
             if result.success:
                 return {
@@ -345,31 +348,27 @@ class AIAnalyzer:
             return None
     
     async def _process_action(self, server: Dict[str, Any], action_rec: Dict[str, Any], 
-                             decision, action_type: str) -> Optional[Dict[str, Any]]:
-        """Process a single action (log and optionally execute)."""
+                             action_type: str, analysis_id: int) -> Optional[Dict[str, Any]]:
+        """Process a single action (execute and log)."""
         action_id = action_rec.get('action_id')
         server_id = server['id']
         
-        # Log as recommended and capture recommendation_id
-        rec_id = self._log_action(server_id, action_id, 'recommended', decision.reasoning, action_rec)
-        
         # Handle command_get actions - always execute
         if action_type == 'command_get':
-            return await self._execute_and_store_get_action(server, action_rec, decision.reasoning, rec_id)
+            return await self._execute_and_store_get_action(server, action_rec, analysis_id)
         
         # Handle command_execute actions - check approval and automatic flag
         elif action_type == 'command_execute':
-            if decision.risk_level != 'high' and not decision.requires_approval:
-                if self._is_action_automatic(server_id, action_id):
-                    result = self.action_manager.execute_action(
-                        action_id=action_id,
-                        server_info=server,
-                        params=action_rec.get('parameters', {})
-                    )
-                    
-                    # Log execution with reference to recommendation
-                    self._log_action(server_id, action_id, 'executed', decision.reasoning, 
-                                   action_rec, result, recommendation_id=rec_id)
+            # Check if low/medium risk and automatic
+            if self._is_action_automatic(server_id, action_id):
+                result = self.action_manager.execute_action(
+                    action_id=action_id,
+                    server_info=server,
+                    params=action_rec.get('parameters', {})
+                )
+                
+                # Log execution with reference to analysis
+                self._log_execution(server_id, action_id, result, analysis_id)
         
         return None
     
@@ -420,22 +419,12 @@ class AIAnalyzer:
                 f"confidence: {decision.confidence:.2f}, risk: {decision.risk_level}"
             )
             
-            # If no actions but there's analysis, log it as observation
-            if not decision.recommended_actions and decision.reasoning:
-                self.db.execute_update(
-                    """
-                    INSERT INTO execution_logs 
-                    (server_id, action_id, execution_type, ai_reasoning, execution_details, status)
-                    VALUES (%s, NULL, %s, %s, %s, %s)
-                    """,
-                    (server_id, 'analyzed', decision.reasoning, 
-                     json.dumps({
-                         'confidence': decision.confidence,
-                         'risk_level': decision.risk_level,
-                         'requires_approval': decision.requires_approval
-                     }), 'success')
-                )
-                self.logger.info(f"AI analysis logged (no actions needed): {server['name']}")
+            # Log AI analysis (always, even if no actions)
+            analysis_id = self._log_analysis(server_id, decision)
+            
+            if not analysis_id:
+                self.logger.error(f"Failed to log AI analysis for {server['name']}")
+                return
             
             # Process each recommended action
             additional_metrics = []
@@ -446,7 +435,7 @@ class AIAnalyzer:
                 action_info = next((a for a in assigned_actions if a['id'] == action_id), None)
                 
                 if action_info:
-                    get_data = await self._process_action(server, action_rec, decision, action_info.get('action_type'))
+                    get_data = await self._process_action(server, action_rec, action_info.get('action_type'), analysis_id)
                     if get_data:
                         additional_metrics.append(get_data)
                 else:
