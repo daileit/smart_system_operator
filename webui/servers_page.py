@@ -292,9 +292,9 @@ def servers_page():
             ui.notify('Server not found', type='negative')
             return
         
-        # Get current actions with automatic flags
-        current_actions = {action['id']: action.get('automatic', False) 
-                          for action in server.get('allowed_actions', [])}
+        # Get currently assigned actions with their automatic flags
+        assigned_actions = {action['id']: action.get('automatic', False) 
+                           for action in server.get('allowed_actions', [])}
         
         with ui.dialog() as assign_dialog, ui.card().classes('w-[800px] max-h-[80vh]').style('overflow-y: auto;'):
             ui.label(f'Assign Actions: {server["name"]}').classes('text-h6 font-bold mb-2')
@@ -313,7 +313,7 @@ def servers_page():
             cmd_get = [a for a in available_actions if a['action_type'] == 'command_get']
             http_actions = [a for a in available_actions if a['action_type'] == 'http']
             
-            # Store action configurations: {action_id: {'enabled': bool, 'automatic': bool}}
+            # Store action configurations: {action_id: {'assigned': bool, 'automatic': bool}}
             action_configs = {}
             
             # Execute Commands section
@@ -323,15 +323,17 @@ def servers_page():
                     .classes('text-caption text-grey-7 mb-2')
                 
                 for action in cmd_execute:
-                    is_assigned = action['id'] in current_actions
-                    is_automatic = current_actions.get(action['id'], False)
+                    action_id = action['id']
+                    is_assigned = action_id in assigned_actions
+                    is_automatic = assigned_actions.get(action_id, False) if is_assigned else False
                     
-                    action_configs[action['id']] = {'enabled': is_assigned, 'automatic': is_automatic}
+                    # Simple logic: if not assigned → not automatic. If assigned → check automatic flag
+                    action_configs[action_id] = {'assigned': is_assigned, 'automatic': is_automatic}
                     
                     with ui.card().classes('w-full mb-2 hover:shadow-md transition-shadow'):
                         with ui.row().classes('w-full items-start gap-2 p-2'):
-                            # Enable checkbox
-                            enable_check = ui.checkbox(value=is_assigned).classes('mt-1')
+                            # Assign checkbox
+                            assign_check = ui.checkbox(value=is_assigned).classes('mt-1')
                             
                             # Action details
                             with ui.column().classes('flex-grow gap-1'):
@@ -344,23 +346,25 @@ def servers_page():
                                 auto_switch = ui.switch(value=is_automatic).props('color=orange')
                                 auto_switch.set_enabled(is_assigned)
                             
-                            # Update action_configs on changes
-                            # Use default parameters to capture current values in closure
-                            def make_handlers(action_id, switch):
-                                def on_enable_change(e):
-                                    action_configs[action_id]['enabled'] = e.value
+                            # Handler factory to properly capture closure variables
+                            def make_handlers(aid, switch):
+                                def on_assign_change(e):
+                                    # Simple: not assigned → not automatic
+                                    action_configs[aid]['assigned'] = e.value
                                     switch.set_enabled(e.value)
                                     if not e.value:
-                                        action_configs[action_id]['automatic'] = False
+                                        action_configs[aid]['automatic'] = False
                                         switch.value = False
                                 
                                 def on_auto_change(e):
-                                    action_configs[action_id]['automatic'] = e.value
+                                    # Only matters if assigned
+                                    if action_configs[aid]['assigned']:
+                                        action_configs[aid]['automatic'] = e.value
                                 
-                                return on_enable_change, on_auto_change
+                                return on_assign_change, on_auto_change
                             
-                            enable_handler, auto_handler = make_handlers(action['id'], auto_switch)
-                            enable_check.on_value_change(enable_handler)
+                            assign_handler, auto_handler = make_handlers(action_id, auto_switch)
+                            assign_check.on_value_change(assign_handler)
                             auto_switch.on_value_change(auto_handler)
             
             # Get Information section
@@ -370,15 +374,17 @@ def servers_page():
                     .classes('text-caption text-grey-7 mb-2')
                 
                 for action in cmd_get:
-                    is_assigned = action['id'] in current_actions
-                    is_automatic = current_actions.get(action['id'], False)
+                    action_id = action['id']
+                    is_assigned = action_id in assigned_actions
+                    is_automatic = assigned_actions.get(action_id, False) if is_assigned else False
                     
-                    action_configs[action['id']] = {'enabled': is_assigned, 'automatic': is_automatic}
+                    # Simple logic: if not assigned → not automatic. If assigned → check automatic flag
+                    action_configs[action_id] = {'assigned': is_assigned, 'automatic': is_automatic}
                     
                     with ui.card().classes('w-full mb-2 hover:shadow-md transition-shadow'):
                         with ui.row().classes('w-full items-start gap-2 p-2'):
-                            # Enable checkbox
-                            enable_check = ui.checkbox(value=is_assigned).classes('mt-1')
+                            # Assign checkbox
+                            assign_check = ui.checkbox(value=is_assigned).classes('mt-1')
                             
                             # Action details
                             with ui.column().classes('flex-grow gap-1'):
@@ -391,23 +397,25 @@ def servers_page():
                                 auto_switch = ui.switch(value=is_automatic).props('color=green')
                                 auto_switch.set_enabled(is_assigned)
                             
-                            # Update action_configs on changes
-                            # Use default parameters to capture current values in closure
-                            def make_handlers(action_id, switch):
-                                def on_enable_change(e):
-                                    action_configs[action_id]['enabled'] = e.value
+                            # Handler factory to properly capture closure variables
+                            def make_handlers(aid, switch):
+                                def on_assign_change(e):
+                                    # Simple: not assigned → not automatic
+                                    action_configs[aid]['assigned'] = e.value
                                     switch.set_enabled(e.value)
                                     if not e.value:
-                                        action_configs[action_id]['automatic'] = False
+                                        action_configs[aid]['automatic'] = False
                                         switch.value = False
                                 
                                 def on_auto_change(e):
-                                    action_configs[action_id]['automatic'] = e.value
+                                    # Only matters if assigned
+                                    if action_configs[aid]['assigned']:
+                                        action_configs[aid]['automatic'] = e.value
                                 
-                                return on_enable_change, on_auto_change
+                                return on_assign_change, on_auto_change
                             
-                            enable_handler, auto_handler = make_handlers(action['id'], auto_switch)
-                            enable_check.on_value_change(enable_handler)
+                            assign_handler, auto_handler = make_handlers(action_id, auto_switch)
+                            assign_check.on_value_change(assign_handler)
                             auto_switch.on_value_change(auto_handler)
             
             # HTTP Requests section
@@ -418,15 +426,17 @@ def servers_page():
                         .classes('text-caption text-grey-7 mb-2')
                     
                     for action in http_actions:
-                        is_assigned = action['id'] in current_actions
-                        is_automatic = current_actions.get(action['id'], False)
+                        action_id = action['id']
+                        is_assigned = action_id in assigned_actions
+                        is_automatic = assigned_actions.get(action_id, False) if is_assigned else False
                         
-                        action_configs[action['id']] = {'enabled': is_assigned, 'automatic': is_automatic}
+                        # Simple logic: if not assigned → not automatic. If assigned → check automatic flag
+                        action_configs[action_id] = {'assigned': is_assigned, 'automatic': is_automatic}
                         
                         with ui.card().classes('w-full mb-2 hover:shadow-md transition-shadow'):
                             with ui.row().classes('w-full items-start gap-2 p-2'):
-                                # Enable checkbox
-                                enable_check = ui.checkbox(value=is_assigned).classes('mt-1')
+                                # Assign checkbox
+                                assign_check = ui.checkbox(value=is_assigned).classes('mt-1')
                                 
                                 # Action details
                                 with ui.column().classes('flex-grow gap-1'):
@@ -439,23 +449,25 @@ def servers_page():
                                     auto_switch = ui.switch(value=is_automatic).props('color=blue')
                                     auto_switch.set_enabled(is_assigned)
                                 
-                                # Update action_configs on changes
-                                # Use default parameters to capture current values in closure
-                                def make_handlers(action_id, switch):
-                                    def on_enable_change(e):
-                                        action_configs[action_id]['enabled'] = e.value
+                                # Handler factory to properly capture closure variables
+                                def make_handlers(aid, switch):
+                                    def on_assign_change(e):
+                                        # Simple: not assigned → not automatic
+                                        action_configs[aid]['assigned'] = e.value
                                         switch.set_enabled(e.value)
                                         if not e.value:
-                                            action_configs[action_id]['automatic'] = False
+                                            action_configs[aid]['automatic'] = False
                                             switch.value = False
                                     
                                     def on_auto_change(e):
-                                        action_configs[action_id]['automatic'] = e.value
+                                        # Only matters if assigned
+                                        if action_configs[aid]['assigned']:
+                                            action_configs[aid]['automatic'] = e.value
                                     
-                                    return on_enable_change, on_auto_change
+                                    return on_assign_change, on_auto_change
                                 
-                                enable_handler, auto_handler = make_handlers(action['id'], auto_switch)
-                                enable_check.on_value_change(enable_handler)
+                                assign_handler, auto_handler = make_handlers(action_id, auto_switch)
+                                assign_check.on_value_change(assign_handler)
                                 auto_switch.on_value_change(auto_handler)
             
             ui.separator().classes('my-4')
@@ -465,11 +477,11 @@ def servers_page():
                 ui.button('Cancel', on_click=assign_dialog.close).props('outline')
             
             def handle_assign():
-                # Prepare actions config list
+                # Simple logic: only save assigned actions with their automatic flag
                 actions_to_assign = [
                     {'action_id': aid, 'automatic': config['automatic']}
                     for aid, config in action_configs.items()
-                    if config['enabled']
+                    if config['assigned']  # Only include if assigned
                 ]
                 
                 # Update actions
