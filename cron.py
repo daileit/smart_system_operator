@@ -42,31 +42,31 @@ class MetricsCrawler:
             'get_cpu_usage',
             'get_memory_usage'
         ]
-        
-        # Cache for server actions (600s TTL)
-        self._server_actions_cache = {}  # {server_id: {'data': [...], 'timestamp': ...}}
     
     def _get_server_actions_cached(self, server_id: int) -> List[Dict[str, Any]]:
-        """Get server's allowed actions with caching (600s TTL)."""
-        now = time.time()
-        ttl = 600
+        """Get server's allowed actions with Redis caching (600s TTL)."""
+        cache_key = f"cache:server_actions:{server_id}"
         
-        if server_id not in self._server_actions_cache or (now - self._server_actions_cache[server_id]['timestamp']) > ttl:
-            # Cache miss or expired - fetch from DB
-            actions = self.server_manager.get_server_actions(
-                server_id=server_id,
-                automatic_only=False
-            )
-            # Filter for command_get actions only
-            actions = [a for a in actions if a.get('action_type') == 'command_get']
-            
-            self._server_actions_cache[server_id] = {
-                'data': actions,
-                'timestamp': now
-            }
-            self.logger.debug(f"Server actions cache refreshed for server_id={server_id}: {len(actions)} actions")
+        # Try to get from Redis cache
+        cached_data = self.redis.get_json(cache_key)
+        if cached_data:
+            self.logger.debug(f"Server actions cache HIT for server_id={server_id}")
+            return cached_data
         
-        return self._server_actions_cache[server_id]['data']
+        # Cache miss - fetch from DB
+        self.logger.debug(f"Server actions cache MISS for server_id={server_id}")
+        actions = self.server_manager.get_server_actions(
+            server_id=server_id,
+            automatic_only=False
+        )
+        # Filter for command_get actions only
+        actions = [a for a in actions if a.get('action_type') == 'command_get']
+        
+        # Store in Redis with 600s TTL
+        self.redis.set_json(cache_key, actions, ttl=600)
+        self.logger.debug(f"Server actions cached for server_id={server_id}: {len(actions)} actions")
+        
+        return actions
     
     async def _collect_server_metrics(self, server: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """Collect get metrics for a single server."""
@@ -194,42 +194,50 @@ class AIAnalyzer:
         self.running = False
         self.task = None
         self.max_metrics_per_analysis = 5
-        
-        # Cache for actions and server info (600s TTL)
-        self._actions_cache = {'data': None, 'timestamp': 0, 'ttl': 600}
-        self._server_cache = {}  # {server_id: {'data': ..., 'timestamp': ...}}
     
     def _get_all_get_actions_cached(self) -> List[Dict[str, Any]]:
-        """Get all command_get actions with caching (600s TTL)."""
-        now = time.time()
-        cache = self._actions_cache
+        """Get all command_get actions with Redis caching (600s TTL)."""
+        cache_key = "cache:all_get_actions"
         
-        if cache['data'] is None or (now - cache['timestamp']) > cache['ttl']:
-            # Cache miss or expired - fetch from DB
-            cache['data'] = self.action_manager.get_all_actions(
-                action_type='command_get',
-                active_only=True
-            )
-            cache['timestamp'] = now
-            self.logger.debug(f"Actions cache refreshed: {len(cache['data'])} actions")
+        # Try to get from Redis cache
+        cached_data = self.redis.get_json(cache_key)
+        if cached_data:
+            self.logger.debug("All actions cache HIT")
+            return cached_data
         
-        return cache['data']
+        # Cache miss - fetch from DB
+        self.logger.debug("All actions cache MISS")
+        actions = self.action_manager.get_all_actions(
+            action_type='command_get',
+            active_only=True
+        )
+        
+        # Store in Redis with 600s TTL
+        self.redis.set_json(cache_key, actions, ttl=600)
+        self.logger.debug(f"All actions cached: {len(actions)} actions")
+        
+        return actions
     
     def _get_server_cached(self, server_id: int) -> Optional[Dict[str, Any]]:
-        """Get server info with caching (600s TTL)."""
-        now = time.time()
-        ttl = 600
+        """Get server info with Redis caching (600s TTL)."""
+        cache_key = f"cache:server_info:{server_id}"
         
-        if server_id not in self._server_cache or (now - self._server_cache[server_id]['timestamp']) > ttl:
-            # Cache miss or expired - fetch from DB
-            server_data = self.server_manager.get_server(server_id, include_actions=True)
-            self._server_cache[server_id] = {
-                'data': server_data,
-                'timestamp': now
-            }
-            self.logger.debug(f"Server cache refreshed for server_id={server_id}")
+        # Try to get from Redis cache
+        cached_data = self.redis.get_json(cache_key)
+        if cached_data:
+            self.logger.debug(f"Server info cache HIT for server_id={server_id}")
+            return cached_data
         
-        return self._server_cache[server_id]['data']
+        # Cache miss - fetch from DB
+        self.logger.debug(f"Server info cache MISS for server_id={server_id}")
+        server_data = self.server_manager.get_server(server_id, include_actions=True)
+        
+        if server_data:
+            # Store in Redis with 600s TTL
+            self.redis.set_json(cache_key, server_data, ttl=600)
+            self.logger.debug(f"Server info cached for server_id={server_id}")
+        
+        return server_data
     
     def _get_historical_analysis(self, server_id: int, limit: int = 2) -> List[Dict[str, Any]]:
         """Get last N AI analysis results for historical context."""
