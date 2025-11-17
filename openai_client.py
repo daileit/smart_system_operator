@@ -150,80 +150,41 @@ class OpenAIClient:
     
     def _init_system_prompt(self):
         """Initialize the system prompt for server management AI."""
-        self.system_prompt = """You are an expert server operations AI assistant for the Smart System Operator platform.
+        self.system_prompt = """You are a server operations AI for Smart System Operator. Analyze metrics and recommend actions.
 
-        Your role is to analyze server metrics, execution logs, and system status to recommend appropriate actions.
+        RULES:
+        1. Safety first - avoid high-risk actions unless critical
+        2. Be concise - max 2 sentences for reasoning
+        3. Use Vietnamese for analysis
+        4. Only recommend actions from assigned_action_ids list
 
-        IMPORTANT GUIDELINES:
-        1. SAFETY FIRST: Never recommend high-risk actions (reboot, stop services) unless absolutely necessary
-        2. BE CONCISE: Keep reasoning clear and brief - avoid repetition, no long explanations
-        3. DIRECT LANGUAGE: Get straight to the point - state the issue and recommended action
-        4. CONFIDENCE LEVELS: Be honest about uncertainty - use confidence scores appropriately
-        5. RISK ASSESSMENT: Classify every recommendation as low/medium/high risk
-        6. LANGUAGE REQUIREMENTS: Analysis should be in 'Vietnamese' but keep it engaging and not boring
+        ACTION TYPES:
+        - command_get: Info gathering (always executed immediately, results in next cycle)
+        - command_execute: Modify server (needs approval/automatic flag)
+        - http: API calls (needs approval)
 
-        AVAILABLE ACTION TYPES:
-        - command_get: Gather information (LOW RISK - check status, get metrics, list processes, etc.)
-          * These are ALWAYS executed immediately when you recommend them (no approval needed)
-          * Results are automatically added to the metrics for your next analysis
-          * Use freely to gather more context before making decisions
-        
-        - command_execute: Modify server state (HIGH RISK - reboot, stop/start services, kill processes, etc.)
-          * These require approval checks and automatic flag configuration
-          * Only executed if risk is low/medium AND automatic flag is enabled
-          * Use with caution and clear justification
-        
-        - http: Make HTTP API calls (MEDIUM RISK - depends on endpoint)
-          * Handled similarly to command_execute with approval checks
+        PROBE MODES:
+        - HEALTHY (CPU<80%, RAM<85%): Max 1 GET action or 0 if data sufficient
+        - PROBLEMS detected: Multiple GET actions OK for diagnosis
+        - SUFFICIENT DATA: Focus on fixes, minimal GET actions
 
-        METRICS COLLECTION STRATEGY:
-        - The cron system automatically collects ONLY CPU and RAM usage every 60 seconds (kept simple for speed)
-        - If you need MORE detailed information (disk usage, processes, system load, services, network), 
-          you MUST recommend command_get actions to gather that additional data
-        - **IMPORTANT**: command_get actions you recommend are executed IMMEDIATELY and results are available in your next analysis
-        - This creates an intelligent feedback loop: analyze basic metrics → request detailed data → analyze enriched data → take action
-        - Always start by analyzing available CPU/RAM data, then request more information if needed
-        - Example: If CPU is high, recommend 'get_top_processes' to identify which processes are consuming resources
-        - Example: If you need disk info, recommend 'get_disk_usage' action
-        - The system will execute your GET recommendations and provide results in the next cycle
+        STRATEGY:
+        Cron auto-collects CPU/RAM every 60s. For more data (disk, processes, services), recommend command_get actions.
+        Your GET recommendations execute immediately and results appear in next analysis cycle.
 
-        DECISION FRAMEWORK:
-        1. Analyze the current server metrics (CPU & RAM from cron, plus any AI-requested data from previous cycles)
-        2. Identify potential issues or anomalies - be BRIEF in your assessment
-        3. If more information is needed, recommend command_get actions (they'll execute immediately)
-        4. If you have sufficient data and see clear problems, recommend command_execute actions
-        5. Recommend the least invasive actions first (prefer command_get over command_execute)
-        6. Keep reasoning SHORT - 1-2 sentences maximum per action
-        7. Remember: GET actions build your knowledge progressively, EXECUTE actions need justification
-        
-        CONCISENESS RULES:
-        - Overall reasoning: Maximum 2-3 sentences
-        - Per-action reasoning: Maximum 1-2 sentences
-        - Avoid phrases like "based on the analysis" or "it is recommended that"
-        - Just state: "CPU high (85%) → Get process list to identify issue"
-        - No long introductions or conclusions
-
-        OUTPUT FORMAT:
-        Return a JSON object with:
+        OUTPUT JSON:
         {
-            "recommended_actions": [
-                {
-                    "action_id": <int>,
-                    "action_name": "<string>",
-                    "priority": <int 1-10>,
-                    "parameters": {<param_name>: <param_value>},
-                    "reasoning": "<why this action>"
-                }
-            ],
-            "reasoning": "<overall reasoning>",
-            "confidence": <float 0.0-1.0>,
-            "risk_level": "<low|medium|high>",
-            "requires_approval": <boolean>
+        "recommended_actions": [{"action_id": <int>, "action_name": "<str>", "priority": <1-10>, "parameters": {}, "reasoning": "<brief>"}],
+        "reasoning": "<brief overall>",
+        "confidence": <0.0-1.0>,
+        "risk_level": "<low|medium|high>",
+        "requires_approval": <bool>
         }"""
     
     def analyze_server_metrics(self, 
                                server_info: Dict[str, Any],
                                available_actions: List[Dict[str, Any]],
+                               assigned_action_ids: Optional[List[int]] = None,
                                execution_logs: Optional[List[Dict[str, Any]]] = None,
                                server_statistics: Optional[Dict[str, Any]] = None,
                                current_metrics: Optional[Dict[str, Any]] = None) -> AIDecision:
@@ -232,7 +193,8 @@ class OpenAIClient:
         
         Args:
             server_info: Server details (name, ip, description, etc.)
-            available_actions: List of actions available for this server
+            available_actions: List of ALL available actions (for AI's knowledge)
+            assigned_action_ids: List of action IDs actually assigned to this server (for execution)
             execution_logs: Recent execution logs
             server_statistics: Server execution statistics
             current_metrics: Current server metrics (CPU, memory, disk, etc.)
@@ -241,6 +203,10 @@ class OpenAIClient:
             AIDecision with recommended actions and reasoning
         """
         try:
+            # If not provided, assume all actions are assigned (backward compatibility)
+            if assigned_action_ids is None:
+                assigned_action_ids = [a['id'] for a in available_actions]
+            
             # Build context for AI
             context = self._build_context(
                 server_info, 
@@ -250,13 +216,16 @@ class OpenAIClient:
                 current_metrics
             )
             
-            # Create user message
+            # Create user message with assigned actions info
             user_message = f"""Analyze this server and recommend appropriate actions:
 
             SERVER INFORMATION:
             {json.dumps(server_info, indent=2, default=str)}
 
-            AVAILABLE ACTIONS:
+            ASSIGNED ACTION IDs (only these can be executed):
+            {json.dumps(assigned_action_ids, indent=2)}
+
+            AVAILABLE ACTIONS (for your reference - but only recommend assigned ones):
             {json.dumps(available_actions, indent=2, default=str)}
 
             RECENT EXECUTION LOGS (last 10):
@@ -268,7 +237,9 @@ class OpenAIClient:
             CURRENT METRICS:
             {json.dumps(current_metrics or {}, indent=2, default=str)}
 
-            Based on this information, recommend the most appropriate actions to take. Focus on monitoring first, only suggest interventions if there are clear issues."""
+            Based on this information, recommend the most appropriate actions to take. 
+            CRITICAL: Only recommend actions from the ASSIGNED ACTION IDs list.
+            Remember PROBE MODE rules: If server is healthy, max 1 GET action or 0 if data sufficient."""
             
             # Call OpenAI API
             response = self.client.chat.completions.create(

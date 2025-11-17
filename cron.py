@@ -384,14 +384,28 @@ class AIAnalyzer:
             if not context['recent_metrics']:
                 return
             
-            available_actions = server.get('allowed_actions', [])
-            if not available_actions:
+            # Get assigned actions (for execution permission check)
+            assigned_actions = server.get('allowed_actions', [])
+            if not assigned_actions:
                 return
             
-            # Call OpenAI for analysis
+            # Get ALL available command_get actions to enhance AI capability
+            all_get_actions = self.action_manager.get_all_actions(
+                action_type='command_get',
+                active_only=True
+            )
+            
+            # Get assigned command_execute actions
+            execute_actions = [a for a in assigned_actions if a.get('action_type') == 'command_execute']
+            
+            # Combine: ALL get actions + assigned execute actions
+            available_actions_for_ai = all_get_actions + execute_actions
+            
+            # Call OpenAI for analysis with enhanced action list
             decision = self.openai.analyze_server_metrics(
                 server_info=server,
-                available_actions=available_actions,
+                available_actions=available_actions_for_ai,
+                assigned_action_ids=[a['id'] for a in assigned_actions],  # Pass assigned IDs for validation
                 execution_logs=context['execution_logs'],
                 server_statistics=context['server_stats'],
                 current_metrics={
@@ -410,12 +424,20 @@ class AIAnalyzer:
             additional_metrics = []
             for action_rec in decision.recommended_actions:
                 action_id = action_rec.get('action_id')
-                action_info = next((a for a in available_actions if a['id'] == action_id), None)
+                
+                # Verify action is assigned to this server before executing
+                action_info = next((a for a in assigned_actions if a['id'] == action_id), None)
                 
                 if action_info:
                     get_data = await self._process_action(server, action_rec, decision, action_info.get('action_type'))
                     if get_data:
                         additional_metrics.append(get_data)
+                else:
+                    # AI recommended an action not assigned to this server
+                    self.logger.warning(
+                        f"AI recommended action_id={action_id} for {server['name']}, "
+                        f"but it's not assigned. Skipping execution."
+                    )
             
             # Add AI-requested metrics to Redis
             if additional_metrics:
