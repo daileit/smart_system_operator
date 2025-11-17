@@ -77,6 +77,7 @@ class MetricsCrawler:
                 action_id = action['action_id']
                 
                 try:
+                    logger.debug(f"Collecting {action_name} for {server_name}")
                     result = self.action_manager.execute_action(
                         action_id=action_id,
                         server_info=server,
