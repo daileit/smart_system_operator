@@ -73,7 +73,7 @@ class ServerManager:
         try:
             server = self.db.fetch_one(
                 """
-                SELECT s.name, s.ip_address, s.description, s.created_by, s.created_at,
+                SELECT s.name, s.ip_address, s.description, s.created_by, s.created_at
                 FROM servers s
                 WHERE s.id = %s
                 """,
