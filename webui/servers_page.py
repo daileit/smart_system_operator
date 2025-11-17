@@ -295,18 +295,29 @@ def servers_page():
             ui.notify('Server not found', type='negative')
             return
         
-        current_action_ids = [action['id'] for action in server.get('allowed_actions', [])]
+        # Get current actions with automatic flags
+        current_actions = {action['id']: action.get('automatic', False) 
+                          for action in server.get('allowed_actions', [])}
         
-        with ui.dialog() as assign_dialog, ui.card().classes('w-[700px] max-h-[80vh]').style('overflow-y: auto;'):
+        with ui.dialog() as assign_dialog, ui.card().classes('w-[800px] max-h-[80vh]').style('overflow-y: auto;'):
             ui.label(f'Assign Actions: {server["name"]}').classes('text-h6 font-bold mb-2')
             ui.label(f'{server["ip_address"]}:{server["port"]}').classes('text-caption text-grey-7 mb-4')
+            
+            # Info banner about automatic execution
+            with ui.card().classes('w-full bg-blue-50 border-l-4 border-blue-500 mb-4'):
+                with ui.row().classes('items-start gap-2 p-2'):
+                    ui.icon('info', size='sm').classes('text-blue-600')
+                    with ui.column().classes('gap-1'):
+                        ui.label('Automatic Execution').classes('text-subtitle2 font-bold text-blue-900')
+                        ui.label('Enable "Auto" for low-risk actions to let AI execute them automatically. Keep disabled for advisory-only mode.').classes('text-caption text-grey-700')
             
             # Group actions by type
             cmd_execute = [a for a in available_actions if a['action_type'] == 'command_execute']
             cmd_get = [a for a in available_actions if a['action_type'] == 'command_get']
             http_actions = [a for a in available_actions if a['action_type'] == 'http']
             
-            selected_actions = []
+            # Store action configurations: {action_id: {'enabled': bool, 'automatic': bool}}
+            action_configs = {}
             
             # Execute Commands section
             with ui.expansion('Execute Commands (Modify Server State)', icon='warning') \
@@ -315,20 +326,40 @@ def servers_page():
                     .classes('text-caption text-grey-7 mb-2')
                 
                 for action in cmd_execute:
-                    with ui.row().classes('w-full items-start gap-2 mb-2'):
-                        checkbox = ui.checkbox(value=action['id'] in current_action_ids)
-                        with ui.column().classes('flex-grow gap-1'):
-                            ui.label(action['action_name']).classes('text-body2 font-bold')
-                            ui.label(action['description']).classes('text-caption text-grey-7')
-                        
-                        # Store checkbox reference
-                        checkbox.on_value_change(lambda e, aid=action['id']: 
-                            selected_actions.append(aid) if e.value and aid not in selected_actions 
-                            else selected_actions.remove(aid) if not e.value and aid in selected_actions 
-                            else None
-                        )
-                        if action['id'] in current_action_ids:
-                            selected_actions.append(action['id'])
+                    is_assigned = action['id'] in current_actions
+                    is_automatic = current_actions.get(action['id'], False)
+                    
+                    action_configs[action['id']] = {'enabled': is_assigned, 'automatic': is_automatic}
+                    
+                    with ui.card().classes('w-full mb-2 hover:shadow-md transition-shadow'):
+                        with ui.row().classes('w-full items-start gap-2 p-2'):
+                            # Enable checkbox
+                            enable_check = ui.checkbox(value=is_assigned).classes('mt-1')
+                            
+                            # Action details
+                            with ui.column().classes('flex-grow gap-1'):
+                                ui.label(action['action_name']).classes('text-body2 font-bold')
+                                ui.label(action['description']).classes('text-caption text-grey-7')
+                            
+                            # Automatic toggle (only enabled if action is assigned)
+                            with ui.column().classes('items-end gap-1'):
+                                ui.label('Auto Execute').classes('text-caption text-grey-7')
+                                auto_switch = ui.switch(value=is_automatic).props('color=orange')
+                                auto_switch.set_enabled(is_assigned)
+                            
+                            # Update action_configs on changes
+                            def on_enable_change(e, aid=action['id'], auto_sw=auto_switch):
+                                action_configs[aid]['enabled'] = e.value
+                                auto_sw.set_enabled(e.value)
+                                if not e.value:
+                                    action_configs[aid]['automatic'] = False
+                                    auto_sw.value = False
+                            
+                            def on_auto_change(e, aid=action['id']):
+                                action_configs[aid]['automatic'] = e.value
+                            
+                            enable_check.on_value_change(on_enable_change)
+                            auto_switch.on_value_change(on_auto_change)
             
             # Get Information section
             with ui.expansion('Get Information (Read-Only Operations)', icon='info') \
@@ -337,19 +368,40 @@ def servers_page():
                     .classes('text-caption text-grey-7 mb-2')
                 
                 for action in cmd_get:
-                    with ui.row().classes('w-full items-start gap-2 mb-2'):
-                        checkbox = ui.checkbox(value=action['id'] in current_action_ids)
-                        with ui.column().classes('flex-grow gap-1'):
-                            ui.label(action['action_name']).classes('text-body2 font-bold')
-                            ui.label(action['description']).classes('text-caption text-grey-7')
-                        
-                        checkbox.on_value_change(lambda e, aid=action['id']: 
-                            selected_actions.append(aid) if e.value and aid not in selected_actions 
-                            else selected_actions.remove(aid) if not e.value and aid in selected_actions 
-                            else None
-                        )
-                        if action['id'] in current_action_ids:
-                            selected_actions.append(action['id'])
+                    is_assigned = action['id'] in current_actions
+                    is_automatic = current_actions.get(action['id'], False)
+                    
+                    action_configs[action['id']] = {'enabled': is_assigned, 'automatic': is_automatic}
+                    
+                    with ui.card().classes('w-full mb-2 hover:shadow-md transition-shadow'):
+                        with ui.row().classes('w-full items-start gap-2 p-2'):
+                            # Enable checkbox
+                            enable_check = ui.checkbox(value=is_assigned).classes('mt-1')
+                            
+                            # Action details
+                            with ui.column().classes('flex-grow gap-1'):
+                                ui.label(action['action_name']).classes('text-body2 font-bold')
+                                ui.label(action['description']).classes('text-caption text-grey-7')
+                            
+                            # Automatic toggle (only enabled if action is assigned)
+                            with ui.column().classes('items-end gap-1'):
+                                ui.label('Auto Execute').classes('text-caption text-grey-7')
+                                auto_switch = ui.switch(value=is_automatic).props('color=green')
+                                auto_switch.set_enabled(is_assigned)
+                            
+                            # Update action_configs on changes
+                            def on_enable_change(e, aid=action['id'], auto_sw=auto_switch):
+                                action_configs[aid]['enabled'] = e.value
+                                auto_sw.set_enabled(e.value)
+                                if not e.value:
+                                    action_configs[aid]['automatic'] = False
+                                    auto_sw.value = False
+                            
+                            def on_auto_change(e, aid=action['id']):
+                                action_configs[aid]['automatic'] = e.value
+                            
+                            enable_check.on_value_change(on_enable_change)
+                            auto_switch.on_value_change(on_auto_change)
             
             # HTTP Requests section
             if http_actions:
@@ -359,19 +411,40 @@ def servers_page():
                         .classes('text-caption text-grey-7 mb-2')
                     
                     for action in http_actions:
-                        with ui.row().classes('w-full items-start gap-2 mb-2'):
-                            checkbox = ui.checkbox(value=action['id'] in current_action_ids)
-                            with ui.column().classes('flex-grow gap-1'):
-                                ui.label(action['action_name']).classes('text-body2 font-bold')
-                                ui.label(action['description']).classes('text-caption text-grey-7')
-                            
-                            checkbox.on_value_change(lambda e, aid=action['id']: 
-                                selected_actions.append(aid) if e.value and aid not in selected_actions 
-                                else selected_actions.remove(aid) if not e.value and aid in selected_actions 
-                                else None
-                            )
-                            if action['id'] in current_action_ids:
-                                selected_actions.append(action['id'])
+                        is_assigned = action['id'] in current_actions
+                        is_automatic = current_actions.get(action['id'], False)
+                        
+                        action_configs[action['id']] = {'enabled': is_assigned, 'automatic': is_automatic}
+                        
+                        with ui.card().classes('w-full mb-2 hover:shadow-md transition-shadow'):
+                            with ui.row().classes('w-full items-start gap-2 p-2'):
+                                # Enable checkbox
+                                enable_check = ui.checkbox(value=is_assigned).classes('mt-1')
+                                
+                                # Action details
+                                with ui.column().classes('flex-grow gap-1'):
+                                    ui.label(action['action_name']).classes('text-body2 font-bold')
+                                    ui.label(action['description']).classes('text-caption text-grey-7')
+                                
+                                # Automatic toggle (only enabled if action is assigned)
+                                with ui.column().classes('items-end gap-1'):
+                                    ui.label('Auto Execute').classes('text-caption text-grey-7')
+                                    auto_switch = ui.switch(value=is_automatic).props('color=blue')
+                                    auto_switch.set_enabled(is_assigned)
+                                
+                                # Update action_configs on changes
+                                def on_enable_change(e, aid=action['id'], auto_sw=auto_switch):
+                                    action_configs[aid]['enabled'] = e.value
+                                    auto_sw.set_enabled(e.value)
+                                    if not e.value:
+                                        action_configs[aid]['automatic'] = False
+                                        auto_sw.value = False
+                                
+                                def on_auto_change(e, aid=action['id']):
+                                    action_configs[aid]['automatic'] = e.value
+                                
+                                enable_check.on_value_change(on_enable_change)
+                                auto_switch.on_value_change(on_auto_change)
             
             ui.separator().classes('my-4')
             
@@ -380,12 +453,23 @@ def servers_page():
                 ui.button('Cancel', on_click=assign_dialog.close).props('outline')
             
             def handle_assign():
+                # Prepare actions config list
+                actions_to_assign = [
+                    {'action_id': aid, 'automatic': config['automatic']}
+                    for aid, config in action_configs.items()
+                    if config['enabled']
+                ]
+                
                 # Update actions
                 server_manager.detach_all_actions(server_id)
-                if selected_actions:
-                    server_manager.attach_actions(server_id, selected_actions)
+                if actions_to_assign:
+                    server_manager.attach_actions_with_config(server_id, actions_to_assign)
                 
-                ui.notify(f'Actions updated! {len(selected_actions)} actions assigned.', type='positive')
+                auto_count = sum(1 for a in actions_to_assign if a['automatic'])
+                ui.notify(
+                    f'Actions updated! {len(actions_to_assign)} assigned ({auto_count} automatic).', 
+                    type='positive'
+                )
                 assign_dialog.close()
                 refresh_servers()
         

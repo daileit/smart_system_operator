@@ -289,6 +289,42 @@ class ServerManager:
             self.logger.error(f"Error attaching actions to server {server_id}: {e}")
             return False
     
+    def attach_actions_with_config(self, server_id: int, 
+                                   actions_config: List[Dict[str, Any]]) -> bool:
+        """
+        Attach multiple actions to a server with individual automatic flags.
+        
+        Args:
+            server_id: Server ID
+            actions_config: List of dicts with 'action_id' and 'automatic' keys
+                           Example: [{'action_id': 1, 'automatic': True}, ...]
+            
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            if not actions_config:
+                return True
+            
+            # Prepare batch insert with individual automatic flags
+            values = [(server_id, config['action_id'], config.get('automatic', False)) 
+                     for config in actions_config]
+            
+            query = """
+                INSERT INTO server_allowed_actions (server_id, action_id, automatic)
+                VALUES (%s, %s, %s)
+                ON DUPLICATE KEY UPDATE automatic = VALUES(automatic)
+            """
+            
+            rows_affected = self.db.execute_many(query, values)
+            
+            self.logger.info(f"Attached/updated {rows_affected} actions to server {server_id}")
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"Error attaching actions with config to server {server_id}: {e}")
+            return False
+    
     def detach_action(self, server_id: int, action_id: int) -> bool:
         """
         Detach an action from a server.

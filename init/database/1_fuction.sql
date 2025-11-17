@@ -8,7 +8,7 @@ CREATE TABLE IF NOT EXISTS actions (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     INDEX idx_type (action_type),
     INDEX idx_active (is_active)
-);
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ===== SERVERS TABLE =====
 CREATE TABLE IF NOT EXISTS servers (
@@ -25,7 +25,7 @@ CREATE TABLE IF NOT EXISTS servers (
     FOREIGN KEY (created_by) REFERENCES users(user_id),
     UNIQUE KEY unique_server (ip_address, port),
     INDEX idx_created_by (created_by)
-);
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ===== COMMAND CONFIGS TABLE =====
 CREATE TABLE IF NOT EXISTS command_configs (
@@ -36,7 +36,7 @@ CREATE TABLE IF NOT EXISTS command_configs (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (action_id) REFERENCES actions(id) ON DELETE CASCADE,
     UNIQUE KEY unique_action (action_id)
-);
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ===== HTTP CONFIGS TABLE =====
 CREATE TABLE IF NOT EXISTS http_configs (
@@ -51,7 +51,7 @@ CREATE TABLE IF NOT EXISTS http_configs (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (action_id) REFERENCES actions(id) ON DELETE CASCADE,
     UNIQUE KEY unique_action (action_id)
-);
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ===== SERVER ALLOWED ACTIONS TABLE (WITH AUTOMATIC FLAG) =====
 CREATE TABLE IF NOT EXISTS server_allowed_actions (
@@ -65,7 +65,7 @@ CREATE TABLE IF NOT EXISTS server_allowed_actions (
     UNIQUE KEY unique_server_action (server_id, action_id),
     INDEX idx_server_auto (server_id, automatic),
     INDEX idx_action_auto (action_id, automatic)
-);
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ===== EXECUTION LOGS TABLE (WITH EXECUTION TYPE) =====
 CREATE TABLE IF NOT EXISTS execution_logs (
@@ -86,7 +86,7 @@ CREATE TABLE IF NOT EXISTS execution_logs (
     INDEX idx_action_date (action_id, executed_at),
     INDEX idx_execution_type (execution_type),
     INDEX idx_status_date (status, executed_at)
-);
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ===== COMMAND EXECUTE ACTIONS =====
 INSERT IGNORE INTO actions (action_name, action_type, description) VALUES
