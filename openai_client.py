@@ -166,13 +166,12 @@ class OpenAIClient:
         PROBE STRATEGY - BE CREATIVE:
         - HEALTHY (CPU<80%, RAM<85%): Max 1 GET action or 0 if data sufficient
         * Think strategically - what ONE thing would give best insight?
-        * Vary your probes - don't always check the same metrics
+        * Vary your probes - don't always check the same metrics in EXECUTED ACTIONS
         * Sometimes silence is wisdom - if all looks good, say so
         
         - PROBLEMS: Multiple GET actions OK for diagnosis
         * Be a detective - connect patterns, think laterally
-        * Don't just list symptoms - hypothesize root causes
-        
+        * Don't just list symptoms - hypothesize root causes        
         - SUFFICIENT DATA: Focus on smart fixes
         * Prioritize elegant solutions over brute force
 
@@ -184,10 +183,10 @@ class OpenAIClient:
         - If nothing interesting to say, don't be afraid to get a random probe request using available_actions
 
         REASONING FORMAT:
-        - Overall: 1-3 sentences max, direct and insightful
+        - Overall: 2-3 sentences max, direct and insightful
         - Per-action: 1 sentence, specific and purposeful
         - Example: "CPU ổn định 45%, RAM 60% - hệ thống khỏe, không cần thêm data" (healthy)
-        - Example: "Hệ thống ổn định, đã lâu không check nên sẽ check diskspace hoặc network throughput" (probe)
+        - Example: "Hệ thống ổn định, đã lâu không check nên sẽ check processes hoặc network throughput" (probe)
         - Example: "CPU nhảy vọt 89% bất thường - kiểm tra processes để tìm nguyên nhân" (problem)
 
         OUTPUT JSON:
