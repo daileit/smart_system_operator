@@ -15,6 +15,74 @@ def dashboard_page():
     """Main dashboard with servers list, live metrics, and AI chat."""
     ui.page_title(APP_TITLE)
     ui.add_head_html(f'<link rel="icon" href="{APP_LOGO_PATH}">')
+    
+    # Add custom CSS for animations
+    ui.add_head_html('''
+    <style>
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateX(-20px); }
+            to { opacity: 1; transform: translateX(0); }
+        }
+        
+        @keyframes pulse-glow {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.6; }
+        }
+        
+        @keyframes spin-slow {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+        
+        .animate-fade-in {
+            animation: fadeIn 0.5s ease-out;
+        }
+        
+        .animate-slide-in {
+            animation: slideIn 0.5s ease-out;
+        }
+        
+        .animate-pulse {
+            animation: pulse-glow 2s ease-in-out infinite;
+        }
+        
+        .animate-bounce {
+            animation: bounce 1s infinite;
+        }
+        
+        .animate-spin-slow {
+            animation: spin-slow 3s linear infinite;
+        }
+        
+        /* Smooth transitions for progress bars */
+        .q-linear-progress__track {
+            transition: all 0.5s ease-in-out !important;
+        }
+        
+        /* Hover effects */
+        .hover\\:shadow-lg:hover {
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+            transform: translateY(-2px);
+            transition: all 0.3s ease;
+        }
+        
+        /* Live indicator pulse */
+        @keyframes live-pulse {
+            0% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.7); }
+            70% { box-shadow: 0 0 0 10px rgba(34, 197, 94, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0); }
+        }
+        
+        .live-indicator {
+            animation: live-pulse 2s infinite;
+        }
+    </style>
+    ''')
     page_id = ui.context.client.page.path.lstrip('/')
     
     if not user_session.get('authenticated'):
@@ -53,24 +121,39 @@ def dashboard_page():
             return metrics_list[0]  # Most recent
         return None
     
-    def parse_metric_value(output: str, metric_type: str):
-        """Parse metric output to extract numeric value."""
+    def parse_metric_value(metric_data: dict, metric_type: str):
+        """Parse metric data to extract numeric value."""
         try:
+            # Handle both old format (direct output) and new format (nested structure)
+            output = None
+            if isinstance(metric_data, dict):
+                output = metric_data.get('output', '')
+            elif isinstance(metric_data, str):
+                output = metric_data
+            
+            if not output:
+                return 0.0
+            
             if metric_type == 'cpu':
                 # Extract percentage from CPU output
                 if '%' in output:
-                    return float(output.strip().replace('%', ''))
+                    return float(output.strip().replace('%', '').replace('CPU:', '').strip())
             elif metric_type == 'memory':
                 # Extract percentage from memory output
-                if '(' in output and '%' in output:
-                    percent_str = output.split('(')[1].split('%')[0]
-                    return float(percent_str)
+                # Format: "Memory: 45.2% (3.6G used / 8.0G total)"
+                if '%' in output:
+                    if '(' in output:
+                        percent_str = output.split('(')[1].split('%')[0]
+                        return float(percent_str)
+                    else:
+                        # Just "45.2%"
+                        return float(output.strip().replace('%', '').replace('Memory:', '').strip())
             elif metric_type == 'load':
                 # Extract 1-min load average
                 parts = output.split()
                 if len(parts) > 2:
                     return float(parts[2].rstrip(','))
-        except:
+        except Exception as e:
             pass
         return 0.0
     
@@ -145,30 +228,47 @@ def dashboard_page():
             # Parse metrics
             data = metrics.get('data', {})
             timestamp = metrics.get('timestamp', 'Unknown')
+            source = metrics.get('source', 'cron')  # 'cron' or 'ai_requested'
+            
+            # Show data source badge
+            if source == 'ai_requested':
+                ui.badge('AI-Requested Data', color='purple').classes('mb-2 animate-pulse')
             
             # CPU Usage
             cpu_data = data.get('get_cpu_usage', {})
-            cpu_value = parse_metric_value(cpu_data.get('output', '0%'), 'cpu') if 'output' in cpu_data else 0.0
+            cpu_value = parse_metric_value(cpu_data, 'cpu') if cpu_data else 0.0
+            cpu_color = "red" if cpu_value > 80 else "orange" if cpu_value > 60 else "green"
             
-            with ui.card().classes('w-full p-4 mb-4 shadow-md hover:shadow-lg transition-shadow'):
+            with ui.card().classes('w-full p-4 mb-4 shadow-md hover:shadow-lg transition-all duration-300 animate-fade-in'):
                 with ui.row().classes('w-full items-center gap-2 mb-2'):
-                    ui.icon('memory', size='sm').classes('text-blue-600')
+                    ui.icon('memory', size='sm').classes('text-blue-600 animate-pulse')
                     ui.label('CPU Usage').classes('text-h6 font-bold')
+                    if cpu_value > 80:
+                        ui.badge('HIGH', color='red').classes('animate-bounce')
                 with ui.row().classes('w-full items-center gap-4'):
-                    ui.linear_progress(cpu_value / 100).props(f'size=25px color={"red" if cpu_value > 80 else "orange" if cpu_value > 60 else "green"}').classes('flex-grow')
-                    ui.label(f'{cpu_value:.1f}%').classes('text-h4 font-bold min-w-[80px]')
+                    ui.linear_progress(cpu_value / 100).props(f'size=25px color={cpu_color}').classes('flex-grow transition-all duration-500')
+                    ui.label(f'{cpu_value:.1f}%').classes('text-h4 font-bold min-w-[80px] animate-pulse')
+                # Show execution time if available
+                if cpu_data and cpu_data.get('execution_time'):
+                    ui.label(f"⚡ {cpu_data['execution_time']:.2f}s").classes('text-caption text-gray-500')
             
             # Memory Usage
             memory_data = data.get('get_memory_usage', {})
-            memory_value = parse_metric_value(memory_data.get('output', '0%'), 'memory') if 'output' in memory_data else 0.0
+            memory_value = parse_metric_value(memory_data, 'memory') if memory_data else 0.0
+            memory_color = "red" if memory_value > 80 else "orange" if memory_value > 60 else "green"
             
-            with ui.card().classes('w-full p-4 mb-4 shadow-md hover:shadow-lg transition-shadow'):
+            with ui.card().classes('w-full p-4 mb-4 shadow-md hover:shadow-lg transition-all duration-300 animate-fade-in'):
                 with ui.row().classes('w-full items-center gap-2 mb-2'):
-                    ui.icon('storage', size='sm').classes('text-purple-600')
+                    ui.icon('storage', size='sm').classes('text-purple-600 animate-pulse')
                     ui.label('Memory Usage').classes('text-h6 font-bold')
+                    if memory_value > 80:
+                        ui.badge('HIGH', color='red').classes('animate-bounce')
                 with ui.row().classes('w-full items-center gap-4'):
-                    ui.linear_progress(memory_value / 100).props(f'size=25px color={"red" if memory_value > 80 else "orange" if memory_value > 60 else "green"}').classes('flex-grow')
-                    ui.label(f'{memory_value:.1f}%').classes('text-h4 font-bold min-w-[80px]')
+                    ui.linear_progress(memory_value / 100).props(f'size=25px color={memory_color}').classes('flex-grow transition-all duration-500')
+                    ui.label(f'{memory_value:.1f}%').classes('text-h4 font-bold min-w-[80px] animate-pulse')
+                # Show execution time if available
+                if memory_data and memory_data.get('execution_time'):
+                    ui.label(f"⚡ {memory_data['execution_time']:.2f}s").classes('text-caption text-gray-500')
             
             # System Load
             load_data = data.get('get_system_load', {})
@@ -188,45 +288,46 @@ def dashboard_page():
                         ui.label('Disk Usage (/)').classes('text-h6 font-bold')
                     ui.label(disk_data['output']).classes('text-body2 font-mono whitespace-pre bg-gray-100 p-2 rounded')
             
-            # Top Processes
+            # Top Processes (AI-requested data)
             process_data = data.get('get_top_processes', {})
-            if 'output' in process_data or 'parsed_processes' in process_data:
-                with ui.card().classes('w-full p-4 mb-4 shadow-md hover:shadow-lg transition-shadow'):
+            if process_data and process_data.get('output'):
+                with ui.card().classes('w-full p-4 mb-4 shadow-md hover:shadow-lg transition-all duration-300 animate-slide-in'):
                     with ui.row().classes('w-full items-center gap-2 mb-3'):
                         ui.icon('assessment', size='sm').classes('text-indigo-600')
-                        ui.label('Top Processes (Resource Consumption)').classes('text-h6 font-bold')
+                        ui.label('Top Processes').classes('text-h6 font-bold')
+                        if process_data.get('triggered_by') == 'ai_recommendation':
+                            ui.badge('AI', color='purple').classes('text-xs animate-pulse')
                     
-                    # Show parsed process data if available
-                    if 'parsed_processes' in process_data and process_data['parsed_processes']:
-                        # Create table header
-                        with ui.row().classes('w-full gap-2 mb-2 text-caption font-bold bg-gray-100 p-2 rounded'):
-                            ui.label('PID').classes('w-[80px]')
-                            ui.label('CPU %').classes('w-[80px]')
-                            ui.label('MEM %').classes('w-[80px]')
-                            ui.label('Command').classes('flex-grow')
-                        
-                        # Process rows
-                        with ui.scroll_area().classes('h-[180px]'):
-                            for proc in process_data['parsed_processes']:
-                                cpu_color = 'text-red-600' if proc['cpu_percent'] > 50 else 'text-orange-600' if proc['cpu_percent'] > 25 else 'text-green-600'
-                                mem_color = 'text-red-600' if proc['mem_percent'] > 50 else 'text-orange-600' if proc['mem_percent'] > 25 else 'text-green-600'
-                                
-                                with ui.row().classes('w-full gap-2 mb-1 text-caption hover:bg-gray-50 p-1 rounded'):
-                                    ui.label(proc['pid']).classes('w-[80px] font-mono')
-                                    ui.label(f"{proc['cpu_percent']:.1f}%").classes(f'w-[80px] font-mono font-bold {cpu_color}')
-                                    ui.label(f"{proc['mem_percent']:.1f}%").classes(f'w-[80px] font-mono font-bold {mem_color}')
-                                    ui.label(proc['command'][:50] + '...' if len(proc['command']) > 50 else proc['command']).classes('flex-grow font-mono text-gray-700')
-                    else:
-                        # Fallback to raw output
-                        with ui.scroll_area().classes('h-[200px]'):
-                            ui.label(process_data.get('output', 'No data')).classes('text-caption font-mono whitespace-pre bg-gray-100 p-2 rounded')
+                    # Display raw output (parsing is done by AI now)
+                    with ui.scroll_area().classes('h-[200px]'):
+                        ui.label(process_data.get('output', 'No data')).classes('text-caption font-mono whitespace-pre bg-gray-100 p-2 rounded hover:bg-gray-200 transition-colors')
+                    
+                    if process_data.get('execution_time'):
+                        ui.label(f"⚡ {process_data['execution_time']:.2f}s").classes('text-caption text-gray-500')
+            
+            # Network Stats (AI-requested data)
+            network_data = data.get('get_network_stats', {})
+            if network_data and network_data.get('output'):
+                with ui.card().classes('w-full p-4 mb-4 shadow-md hover:shadow-lg transition-all duration-300 animate-slide-in'):
+                    with ui.row().classes('w-full items-center gap-2 mb-2'):
+                        ui.icon('wifi', size='sm').classes('text-cyan-600')
+                        ui.label('Network Statistics').classes('text-h6 font-bold')
+                        if network_data.get('triggered_by') == 'ai_recommendation':
+                            ui.badge('AI', color='purple').classes('text-xs animate-pulse')
+                    with ui.scroll_area().classes('h-[150px]'):
+                        ui.label(network_data['output']).classes('text-caption font-mono whitespace-pre bg-gray-100 p-2 rounded')
+                    if network_data.get('execution_time'):
+                        ui.label(f"⚡ {network_data['execution_time']:.2f}s").classes('text-caption text-gray-500')
             
             # Last updated footer
-            with ui.row().classes('w-full justify-between items-center mt-4 p-2 bg-gray-100 rounded'):
+            with ui.row().classes('w-full justify-between items-center mt-4 p-2 bg-gray-100 rounded animate-fade-in'):
                 with ui.row().classes('items-center gap-2'):
-                    ui.icon('schedule', size='xs').classes('text-gray-600')
+                    ui.icon('schedule', size='xs').classes('text-gray-600 animate-pulse')
                     ui.label(f'Last updated: {timestamp}').classes('text-caption text-gray-600')
-                ui.badge('LIVE', color='green').classes('pulse')
+                with ui.row().classes('items-center gap-2'):
+                    ui.badge('LIVE', color='green').classes('animate-pulse')
+                    if source == 'ai_requested':
+                        ui.badge('AI', color='purple').classes('animate-pulse')
     
     def update_ai_panel(server_id: int):
         """Update AI recommendations panel."""
@@ -278,12 +379,14 @@ def dashboard_page():
                     
                     action_name = details.get('action_name', 'Unknown action')
                     priority = details.get('priority', 5)
+                    action_type = details.get('action_type', 'unknown')
                     
-                    # AI message card with enhanced styling
+                    # AI message card with enhanced styling and animation
                     card_bg = 'bg-gradient-to-r from-blue-50 to-indigo-50' if idx == 0 else 'bg-blue-50'
                     border_class = 'border-l-4 border-blue-500' if idx == 0 else 'border-l-2 border-blue-300'
+                    animation = 'animate-fade-in' if idx < 3 else ''
                     
-                    with ui.card().classes(f'w-full p-4 mb-3 {card_bg} {border_class} shadow-md hover:shadow-lg transition-shadow'):
+                    with ui.card().classes(f'w-full p-4 mb-3 {card_bg} {border_class} shadow-md hover:shadow-lg transition-all duration-300 {animation}'):
                         # Header row
                         with ui.row().classes('w-full justify-between items-start mb-2'):
                             with ui.row().classes('items-center gap-2'):
@@ -321,11 +424,11 @@ def dashboard_page():
                                 ui.json_editor({'content': {'json': details['parameters']}}).classes('w-full').props('read-only')
             
             # Footer with info
-            with ui.row().classes('w-full justify-between items-center mt-4 p-2 bg-purple-100 rounded'):
+            with ui.row().classes('w-full justify-between items-center mt-4 p-2 bg-purple-100 rounded animate-fade-in'):
                 with ui.row().classes('items-center gap-2'):
-                    ui.icon('info', size='xs').classes('text-purple-600')
+                    ui.icon('info', size='xs').classes('text-purple-600 animate-pulse')
                     ui.label(f'{len(recommendations)} recommendations found').classes('text-caption text-purple-800 font-bold')
-                ui.badge('AI', color='purple').classes('px-3')
+                ui.badge('AI', color='purple').classes('px-3 animate-pulse')
     
     def refresh_all():
         """Refresh all panels."""
@@ -423,9 +526,9 @@ def dashboard_page():
             with ui.card().classes('w-full mb-4 shadow-md bg-gradient-to-r from-green-50 to-blue-50'):
                 with ui.row().classes('w-full justify-between items-center p-3'):
                     with ui.row().classes('items-center gap-2'):
-                        ui.icon('monitor_heart', size='sm').classes('text-green-600')
-                        ui.label('Live Metrics').classes('text-h6 font-bold text-gray-800')
-                    ui.badge('Real-time', color='green').classes('px-3 py-1')
+                        ui.icon('monitor_heart', size='sm').classes('text-green-600 animate-pulse')
+                        ui.label('Live Metrics').classes('text-h6 font-bold text-green-800')
+                    ui.badge('Real-time', color='green').classes('px-3 py-1 live-indicator')
             
             metrics_container = ui.column().classes('w-full')
             
