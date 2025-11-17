@@ -173,7 +173,7 @@ class AIAnalyzer:
         self.logger = logger
         self.running = False
         self.task = None
-        self.max_metrics_per_analysis = 4
+        self.max_metrics_per_analysis = 5
     
     def _get_historical_analysis(self, server_id: int, limit: int = 2) -> List[Dict[str, Any]]:
         """Get last N AI analysis results for historical context."""
@@ -225,7 +225,7 @@ class AIAnalyzer:
             LEFT JOIN actions a ON el.action_id = a.id
             WHERE el.server_id = %s
             ORDER BY el.executed_at DESC
-            LIMIT 3
+            LIMIT 6
             """,
             (server_id,)
         )
