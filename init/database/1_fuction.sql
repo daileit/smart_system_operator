@@ -122,7 +122,7 @@ INSERT IGNORE INTO actions (action_name, action_type, description) VALUES
 -- ('get_network_connections', 'command_get', 'Show active network connections on a specific port including connection states. Safe network monitoring.'),
 -- ('get_system_load', 'command_get', 'Get system load averages for 1, 5, and 15 minute intervals. Safe system health check.'),
 -- ('get_uptime', 'command_get', 'Get system uptime and boot time information. Safe system information gathering.'),
--- ('get_failed_services', 'command_get', 'List all systemd services that are in failed state. Safe service health monitoring.'),
+('get_failed_services', 'command_get', 'List all systemd services that are in failed state. Safe service health monitoring.'),
 -- ('get_process_list', 'command_get', 'List all running processes matching a specific name pattern with resource usage. Safe process monitoring.'),
 
 INSERT IGNORE INTO command_configs (action_id, command_template, timeout_seconds) VALUES
@@ -135,4 +135,4 @@ INSERT IGNORE INTO command_configs (action_id, command_template, timeout_seconds
 -- ((SELECT id FROM actions WHERE action_name = 'get_network_connections'), 'ss -tuln | grep ${port}', 5),
 -- ((SELECT id FROM actions WHERE action_name = 'get_system_load'), 'uptime', 5),
 -- ((SELECT id FROM actions WHERE action_name = 'get_uptime'), 'uptime -p && uptime -s', 5),
--- ((SELECT id FROM actions WHERE action_name = 'get_failed_services'), 'sudo systemctl list-units --state=failed --no-pager', 10),
+((SELECT id FROM actions WHERE action_name = 'get_failed_services'), 'sudo systemctl list-units --state=failed --no-pager', 10),

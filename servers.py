@@ -6,42 +6,8 @@ Handles CRUD operations for servers and their allowed actions.
 import jsonlog
 import database as db
 from typing import Optional, Dict, List, Any
-from dataclasses import dataclass
-from datetime import datetime
 
 logger = jsonlog.setup_logger("servers")
-
-
-@dataclass
-class Server:
-    """Server data model."""
-    id: Optional[int] = None
-    name: str = ""
-    ip_address: str = ""
-    port: int = 22
-    username: str = ""
-    ssh_private_key: str = ""
-    description: Optional[str] = None
-    created_at: Optional[datetime] = None
-    updated_at: Optional[datetime] = None
-    created_by: Optional[int] = None
-    allowed_actions: Optional[List[Dict[str, Any]]] = None
-    
-    def to_dict(self) -> Dict[str, Any]:
-        """Convert Server to dictionary."""
-        return {
-            'id': self.id,
-            'name': self.name,
-            'ip_address': self.ip_address,
-            'port': self.port,
-            'username': self.username,
-            'ssh_private_key': self.ssh_private_key,
-            'description': self.description,
-            'created_at': self.created_at.isoformat() if self.created_at else None,
-            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
-            'created_by': self.created_by,
-            'allowed_actions': self.allowed_actions or []
-        }
 
 
 class ServerManager:
@@ -255,74 +221,48 @@ class ServerManager:
     
     # ===== Server-Action Association =====
     
-    def attach_actions(self, server_id: int, action_ids: List[int], 
+    def attach_actions(self, server_id: int, 
+                      action_ids: Optional[List[int]] = None,
+                      actions_config: Optional[List[Dict[str, Any]]] = None,
                       automatic: bool = False) -> bool:
         """
         Attach multiple actions to a server.
         
         Args:
             server_id: Server ID
-            action_ids: List of action IDs to attach
-            automatic: Whether actions should auto-execute (True) or advisory only (False)
+            action_ids: List of action IDs (all with same automatic flag)
+            actions_config: List of dicts with 'action_id' and 'automatic' keys
+                           Example: [{'action_id': 1, 'automatic': True}, ...]
+            automatic: Default automatic flag when using action_ids
             
         Returns:
             True if successful, False otherwise
         """
         try:
-            if not action_ids:
+            # Build values based on input type
+            if actions_config:
+                values = [(server_id, cfg['action_id'], cfg.get('automatic', False)) 
+                         for cfg in actions_config]
+                query = """
+                    INSERT INTO server_allowed_actions (server_id, action_id, automatic)
+                    VALUES (%s, %s, %s)
+                    ON DUPLICATE KEY UPDATE automatic = VALUES(automatic)
+                """
+            elif action_ids:
+                values = [(server_id, action_id, automatic) for action_id in action_ids]
+                query = """
+                    INSERT IGNORE INTO server_allowed_actions (server_id, action_id, automatic)
+                    VALUES (%s, %s, %s)
+                """
+            else:
                 return True
             
-            # Prepare batch insert
-            values = [(server_id, action_id, automatic) for action_id in action_ids]
-            
-            query = """
-                INSERT IGNORE INTO server_allowed_actions (server_id, action_id, automatic)
-                VALUES (%s, %s, %s)
-            """
-            
             rows_affected = self.db.execute_many(query, values)
-            
             self.logger.info(f"Attached {rows_affected} actions to server {server_id}")
             return True
             
         except Exception as e:
             self.logger.error(f"Error attaching actions to server {server_id}: {e}")
-            return False
-    
-    def attach_actions_with_config(self, server_id: int, 
-                                   actions_config: List[Dict[str, Any]]) -> bool:
-        """
-        Attach multiple actions to a server with individual automatic flags.
-        
-        Args:
-            server_id: Server ID
-            actions_config: List of dicts with 'action_id' and 'automatic' keys
-                           Example: [{'action_id': 1, 'automatic': True}, ...]
-            
-        Returns:
-            True if successful, False otherwise
-        """
-        try:
-            if not actions_config:
-                return True
-            
-            # Prepare batch insert with individual automatic flags
-            values = [(server_id, config['action_id'], config.get('automatic', False)) 
-                     for config in actions_config]
-            
-            query = """
-                INSERT INTO server_allowed_actions (server_id, action_id, automatic)
-                VALUES (%s, %s, %s)
-                ON DUPLICATE KEY UPDATE automatic = VALUES(automatic)
-            """
-            
-            rows_affected = self.db.execute_many(query, values)
-            
-            self.logger.info(f"Attached/updated {rows_affected} actions to server {server_id}")
-            return True
-            
-        except Exception as e:
-            self.logger.error(f"Error attaching actions with config to server {server_id}: {e}")
             return False
     
     def detach_action(self, server_id: int, action_id: int) -> bool:
@@ -473,52 +413,7 @@ class ServerManager:
             self.logger.error(f"Error getting servers with action: {e}")
             return []
     
-    # ===== Execution Logging =====
-    
-    def log_execution(self, server_id: int, action_id: int, 
-                     execution_type: str, status: str,
-                     execution_details: Optional[str] = None,
-                     execution_result: Optional[str] = None,
-                     ai_reasoning: Optional[str] = None,
-                     error_message: Optional[str] = None,
-                     execution_time: Optional[float] = None) -> Optional[int]:
-        """
-        Log an action execution or recommendation.
-        
-        Args:
-            server_id: Server ID
-            action_id: Action ID
-            execution_type: 'executed' or 'recommended'
-            status: 'success', 'failed', 'timeout', or 'recommended'
-            execution_details: Command/request details
-            execution_result: Response/output
-            ai_reasoning: AI's reasoning for this action
-            error_message: Error message if failed
-            execution_time: Execution time in seconds
-            
-        Returns:
-            Log ID if successful, None otherwise
-        """
-        try:
-            query = """
-                INSERT INTO execution_logs 
-                (server_id, action_id, execution_type, status, execution_details, 
-                 execution_result, ai_reasoning, error_message, execution_time)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
-            """
-            
-            log_id = self.db.execute_update(
-                query,
-                (server_id, action_id, execution_type, status, execution_details,
-                 execution_result, ai_reasoning, error_message, execution_time)
-            )
-            
-            self.logger.info(f"Logged {execution_type} for action {action_id} on server {server_id}")
-            return log_id
-            
-        except Exception as e:
-            self.logger.error(f"Error logging execution: {e}")
-            return None
+    # ===== Execution Logging (removed - handled by cron.py) =====
     
     def get_execution_logs(self, server_id: Optional[int] = None,
                           action_id: Optional[int] = None,

@@ -48,13 +48,6 @@ class MetricsCrawler:
         server_name = server['name']
         
         try:
-            metrics = {
-                'server_id': server_id,
-                'server_name': server_name,
-                'timestamp': datetime.now().isoformat(),
-                'data': {}
-            }
-            
             # Get server's allowed CPU and RAM monitoring actions only
             allowed_actions = self.db.execute_query(
                 """
@@ -69,8 +62,14 @@ class MetricsCrawler:
             )
             
             if not allowed_actions:
-                self.logger.warning(f"No get metrics actions configured for server {server_name} (ID: {server_id})")
                 return None
+            
+            metrics = {
+                'server_id': server_id,
+                'server_name': server_name,
+                'timestamp': datetime.now().isoformat(),
+                'data': {}
+            }
             
             # Collect basic metrics (CPU & RAM only)
             for action in allowed_actions:
@@ -78,26 +77,21 @@ class MetricsCrawler:
                 action_id = action['action_id']
                 
                 try:
-                    # Execute action (no parameters needed for CPU/RAM)
                     result = self.action_manager.execute_action(
                         action_id=action_id,
                         server_info=server,
                         params={}
                     )
                     
-                    if result.success:
-                        metrics['data'][action_name] = {
-                            'output': result.output,
-                            'execution_time': result.execution_time,
-                            'collected_at': datetime.now().isoformat()
-                        }
-                        self.logger.debug(f"Collected {action_name} for {server_name}")
-                    else:
-                        self.logger.warning(f"Failed to collect {action_name} for {server_name}: {result.error}")
-                        metrics['data'][action_name] = {
-                            'error': result.error,
-                            'collected_at': datetime.now().isoformat()
-                        }
+                    metrics['data'][action_name] = {
+                        'output': result.output if result.success else None,
+                        'error': result.error if not result.success else None,
+                        'execution_time': result.execution_time,
+                        'collected_at': datetime.now().isoformat()
+                    }
+                    
+                    if not result.success:
+                        self.logger.debug(f"Failed: {action_name} on {server_name}")
                 
                 except Exception as e:
                     self.logger.error(f"Error collecting {action_name} for {server_name}: {e}")
@@ -106,87 +100,66 @@ class MetricsCrawler:
                         'collected_at': datetime.now().isoformat()
                     }
             
-            return metrics
+            return metrics if metrics['data'] else None
             
         except Exception as e:
-            self.logger.error(f"Error collecting metrics for server {server_name} (ID: {server_id}): {e}")
+            self.logger.error(f"Error collecting metrics for {server_name}: {e}")
             return None
     
     async def _crawl_cycle(self):
         """Execute one crawl cycle for all servers."""
         try:
-            # Get all active servers
             servers = self.server_manager.get_all_servers(include_actions=False)
             
             if not servers:
-                self.logger.info("No servers configured for monitoring")
                 return
             
-            self.logger.info(f"Starting metrics crawl for {len(servers)} servers")
-            
             # Collect metrics for each server
+            collected = 0
             for server in servers:
-                server_id = server['id']
-                
-                # Collect metrics
                 metrics = await self._collect_server_metrics(server)
                 
                 if metrics and metrics['data']:
-                    # Store in Redis as queue (list)
-                    key = self._get_metrics_key(server_id)
-                    
-                    # Append to list with limit (keep last 100 entries)
+                    key = self._get_metrics_key(server['id'])
                     self.redis.append_json_list_with_limit(
                         key=key,
                         value=metrics,
                         limit=100,
-                        ttl=86400,  # 24 hours
-                        position=0  # Insert at start
+                        ttl=86400,
+                        position=0
                     )
-                    
-                    self.logger.info(f"Cached metrics for server {server['name']} (ID: {server_id})")
-                else:
-                    self.logger.warning(f"No metrics collected for server {server['name']} (ID: {server_id})")
+                    collected += 1
             
-            self.logger.info(f"Completed metrics crawl for {len(servers)} servers")
+            self.logger.info(f"Crawl complete: {collected}/{len(servers)} servers")
             
         except Exception as e:
             self.logger.error(f"Error in crawl cycle: {e}")
     
     async def _run_loop(self):
         """Main loop that runs crawl cycles."""
-        self.logger.info(f"Metrics crawler started with {self.delay_seconds}s delay")
+        self.logger.info(f"Metrics crawler started ({self.delay_seconds}s interval)")
         
         while self.running:
             try:
                 await self._crawl_cycle()
-                
-                # Wait for next cycle
                 await asyncio.sleep(self.delay_seconds)
-                
             except Exception as e:
-                self.logger.error(f"Error in crawler loop: {e}")
+                self.logger.error(f"Crawler loop error: {e}")
                 await asyncio.sleep(self.delay_seconds)
     
     def start(self):
         """Start the metrics crawler."""
-        if self.running:
-            self.logger.warning("Metrics crawler already running")
-            return
-        
-        self.running = True
-        self.task = asyncio.create_task(self._run_loop())
-        self.logger.info("Metrics crawler started")
+        if not self.running:
+            self.running = True
+            self.task = asyncio.create_task(self._run_loop())
     
     def stop(self):
         """Stop the metrics crawler."""
-        if not self.running:
-            return
-        
-        self.running = False
-        if self.task:
-            self.task.cancel()
-        self.logger.info("Metrics crawler stopped")
+        if self.running:
+            self.running = False
+            if self.task:
+                self.task.cancel()
+            self.logger.info("Metrics crawler stopped")
 
 
 class AIAnalyzer:
@@ -345,26 +318,19 @@ class AIAnalyzer:
         """Execute a get action and return results for AI context."""
         action_id = action_rec.get('action_id')
         action_name = action_rec.get('action_name', 'unknown')
-        parameters = action_rec.get('parameters', {})
-        server_id = server['id']
         
         try:
-            self.logger.info(f"Executing GET action '{action_name}' for server {server['name']}")
-            
-            # Execute action
             result = self.action_manager.execute_action(
                 action_id=action_id,
                 server_info=server,
-                params=parameters
+                params=action_rec.get('parameters', {})
             )
             
             # Log execution with reference to recommendation
-            self._log_action(server_id, action_id, 'executed', reasoning, action_rec, result, 
+            self._log_action(server['id'], action_id, 'executed', reasoning, action_rec, result, 
                            recommendation_id=recommendation_id)
             
             if result.success:
-                self.logger.info(f"GET action '{action_name}' executed successfully for {server['name']}")
-                # Return data to be added to next AI analysis
                 return {
                     'action_name': action_name,
                     'output': result.output,
@@ -372,36 +338,29 @@ class AIAnalyzer:
                     'collected_at': datetime.now().isoformat(),
                     'triggered_by': 'ai_recommendation'
                 }
-            else:
-                self.logger.warning(f"GET action '{action_name}' failed for {server['name']}: {result.error}")
-                return None
+            return None
                 
         except Exception as e:
-            self.logger.error(f"Error executing GET action '{action_name}': {e}")
+            self.logger.error(f"Error executing GET '{action_name}': {e}")
             return None
     
     async def _process_action(self, server: Dict[str, Any], action_rec: Dict[str, Any], 
                              decision, action_type: str) -> Optional[Dict[str, Any]]:
         """Process a single action (log and optionally execute)."""
         action_id = action_rec.get('action_id')
-        action_name = action_rec.get('action_name', 'unknown')
         server_id = server['id']
         
         # Log as recommended and capture recommendation_id
         rec_id = self._log_action(server_id, action_id, 'recommended', decision.reasoning, action_rec)
         
-        # Handle command_get actions - always execute regardless of approval
+        # Handle command_get actions - always execute
         if action_type == 'command_get':
             return await self._execute_and_store_get_action(server, action_rec, decision.reasoning, rec_id)
         
         # Handle command_execute actions - check approval and automatic flag
         elif action_type == 'command_execute':
             if decision.risk_level != 'high' and not decision.requires_approval:
-                is_automatic = self._is_action_automatic(server_id, action_id)
-                
-                if is_automatic:
-                    self.logger.info(f"Auto-executing action '{action_name}' for server {server['name']}")
-                    
+                if self._is_action_automatic(server_id, action_id):
                     result = self.action_manager.execute_action(
                         action_id=action_id,
                         server_info=server,
@@ -411,36 +370,22 @@ class AIAnalyzer:
                     # Log execution with reference to recommendation
                     self._log_action(server_id, action_id, 'executed', decision.reasoning, 
                                    action_rec, result, recommendation_id=rec_id)
-                    
-                    self.logger.info(
-                        f"Auto-executed action '{action_name}' for {server['name']}: "
-                        f"{'success' if result.success else 'failed'}"
-                    )
         
         return None
     
     async def _analyze_server(self, server_id: int):
         """Analyze metrics for a single server."""
         try:
-            # Get server info
             server = self.server_manager.get_server(server_id, include_actions=True)
             if not server:
-                self.logger.warning(f"Server {server_id} not found")
                 return
             
-            # Get all context
             context = self._get_server_context(server_id)
-            
             if not context['recent_metrics']:
-                self.logger.debug(f"No metrics available for server {server['name']} (ID: {server_id})")
                 return
             
-            self.logger.info(f"Analyzing {len(context['recent_metrics'])} metrics for server {server['name']} (ID: {server_id})")
-            
-            # Get available actions
             available_actions = server.get('allowed_actions', [])
             if not available_actions:
-                self.logger.warning(f"No actions available for server {server['name']} (ID: {server_id})")
                 return
             
             # Call OpenAI for analysis
@@ -457,8 +402,7 @@ class AIAnalyzer:
             )
             
             self.logger.info(
-                f"AI analysis completed for {server['name']}: "
-                f"{len(decision.recommended_actions)} actions recommended, "
+                f"AI analysis: {server['name']} - {len(decision.recommended_actions)} actions, "
                 f"confidence: {decision.confidence:.2f}, risk: {decision.risk_level}"
             )
             
@@ -466,26 +410,18 @@ class AIAnalyzer:
             additional_metrics = []
             for action_rec in decision.recommended_actions:
                 action_id = action_rec.get('action_id')
-                
-                # Get action type from available actions
                 action_info = next((a for a in available_actions if a['id'] == action_id), None)
-                if not action_info:
-                    self.logger.warning(f"Action {action_id} not found in available actions")
-                    continue
                 
-                action_type = action_info.get('action_type')
-                
-                # Process action and collect any additional metrics from GET commands
-                get_data = await self._process_action(server, action_rec, decision, action_type)
-                if get_data:
-                    additional_metrics.append(get_data)
+                if action_info:
+                    get_data = await self._process_action(server, action_rec, decision, action_info.get('action_type'))
+                    if get_data:
+                        additional_metrics.append(get_data)
             
-            # If we executed GET commands, add their results to Redis for next analysis
+            # Add AI-requested metrics to Redis
             if additional_metrics:
                 key = self._get_metrics_key(server_id)
                 current_metrics = self.redis.get_json_list(key) or []
                 
-                # Create a new metrics entry with AI-requested data
                 new_metric = {
                     'server_id': server_id,
                     'server_name': server['name'],
@@ -494,23 +430,18 @@ class AIAnalyzer:
                     'source': 'ai_requested'
                 }
                 
-                # Prepend to metrics list
                 current_metrics.insert(0, new_metric)
-                
-                # Keep only last 100
                 if len(current_metrics) > 100:
                     current_metrics = current_metrics[:100]
                 
                 self.redis.set_json_list(key, current_metrics)
-                self.logger.info(f"Added {len(additional_metrics)} AI-requested metrics to Redis for {server['name']}")
             
-            # Remove consumed metrics from queue (keep AI-requested ones)
+            # Remove consumed metrics
             key = self._get_metrics_key(server_id)
-            metrics_list = self.redis.get_json_list(key) or []
-            remaining_metrics = metrics_list[self.max_metrics_per_analysis:]
+            remaining = (self.redis.get_json_list(key) or [])[self.max_metrics_per_analysis:]
             
-            if remaining_metrics:
-                self.redis.set_json_list(key, remaining_metrics)
+            if remaining:
+                self.redis.set_json_list(key, remaining)
             else:
                 self.redis.delete_key(key)
             
@@ -520,65 +451,46 @@ class AIAnalyzer:
     async def _analysis_cycle(self):
         """Execute one analysis cycle for all servers with metrics."""
         try:
-            # Get all active servers
             servers = self.server_manager.get_all_servers(include_actions=False)
-            
             if not servers:
-                self.logger.info("No servers configured for analysis")
                 return
             
-            self.logger.info(f"Starting AI analysis cycle for {len(servers)} servers")
-            
-            # Analyze each server
-            analyzed_count = 0
+            analyzed = 0
             for server in servers:
-                server_id = server['id']
-                
-                # Check if server has metrics to analyze
-                key = self._get_metrics_key(server_id)
-                if self.redis.exists(key):
-                    await self._analyze_server(server_id)
-                    analyzed_count += 1
+                if self.redis.exists(self._get_metrics_key(server['id'])):
+                    await self._analyze_server(server['id'])
+                    analyzed += 1
             
-            self.logger.info(f"Completed AI analysis cycle: {analyzed_count}/{len(servers)} servers analyzed")
+            self.logger.info(f"Analysis complete: {analyzed}/{len(servers)} servers")
             
         except Exception as e:
             self.logger.error(f"Error in analysis cycle: {e}")
     
     async def _run_loop(self):
         """Main loop that runs analysis cycles."""
-        self.logger.info(f"AI analyzer started with {self.delay_seconds}s delay")
+        self.logger.info(f"AI analyzer started ({self.delay_seconds}s interval)")
         
         while self.running:
             try:
                 await self._analysis_cycle()
-                
-                # Wait for next cycle
                 await asyncio.sleep(self.delay_seconds)
-                
             except Exception as e:
-                self.logger.error(f"Error in analyzer loop: {e}")
+                self.logger.error(f"Analyzer loop error: {e}")
                 await asyncio.sleep(self.delay_seconds)
     
     def start(self):
         """Start the AI analyzer."""
-        if self.running:
-            self.logger.warning("AI analyzer already running")
-            return
-        
-        self.running = True
-        self.task = asyncio.create_task(self._run_loop())
-        self.logger.info("AI analyzer started")
+        if not self.running:
+            self.running = True
+            self.task = asyncio.create_task(self._run_loop())
     
     def stop(self):
         """Stop the AI analyzer."""
-        if not self.running:
-            return
-        
-        self.running = False
-        if self.task:
-            self.task.cancel()
-        self.logger.info("AI analyzer stopped")
+        if self.running:
+            self.running = False
+            if self.task:
+                self.task.cancel()
+            self.logger.info("AI analyzer stopped")
 
 
 class CronManager:
