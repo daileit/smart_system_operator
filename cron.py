@@ -42,6 +42,31 @@ class MetricsCrawler:
             'get_cpu_usage',
             'get_memory_usage'
         ]
+        
+        # Cache for server actions (600s TTL)
+        self._server_actions_cache = {}  # {server_id: {'data': [...], 'timestamp': ...}}
+    
+    def _get_server_actions_cached(self, server_id: int) -> List[Dict[str, Any]]:
+        """Get server's allowed actions with caching (600s TTL)."""
+        now = time.time()
+        ttl = 600
+        
+        if server_id not in self._server_actions_cache or (now - self._server_actions_cache[server_id]['timestamp']) > ttl:
+            # Cache miss or expired - fetch from DB
+            actions = self.server_manager.get_server_actions(
+                server_id=server_id,
+                automatic_only=False
+            )
+            # Filter for command_get actions only
+            actions = [a for a in actions if a.get('action_type') == 'command_get']
+            
+            self._server_actions_cache[server_id] = {
+                'data': actions,
+                'timestamp': now
+            }
+            self.logger.debug(f"Server actions cache refreshed for server_id={server_id}: {len(actions)} actions")
+        
+        return self._server_actions_cache[server_id]['data']
     
     async def _collect_server_metrics(self, server: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """Collect get metrics for a single server."""
@@ -49,14 +74,8 @@ class MetricsCrawler:
         server_name = server['name']
         
         try:
-            # Get server's allowed command_get actions using ServerManager
-            allowed_actions = self.server_manager.get_server_actions(
-                server_id=server_id,
-                automatic_only=False
-            )
-            
-            # Filter for command_get actions only
-            allowed_actions = [a for a in allowed_actions if a.get('action_type') == 'command_get']
+            # Get server's allowed command_get actions with caching
+            allowed_actions = self._get_server_actions_cached(server_id)
             
             if not allowed_actions:
                 return None
@@ -175,6 +194,42 @@ class AIAnalyzer:
         self.running = False
         self.task = None
         self.max_metrics_per_analysis = 5
+        
+        # Cache for actions and server info (600s TTL)
+        self._actions_cache = {'data': None, 'timestamp': 0, 'ttl': 600}
+        self._server_cache = {}  # {server_id: {'data': ..., 'timestamp': ...}}
+    
+    def _get_all_get_actions_cached(self) -> List[Dict[str, Any]]:
+        """Get all command_get actions with caching (600s TTL)."""
+        now = time.time()
+        cache = self._actions_cache
+        
+        if cache['data'] is None or (now - cache['timestamp']) > cache['ttl']:
+            # Cache miss or expired - fetch from DB
+            cache['data'] = self.action_manager.get_all_actions(
+                action_type='command_get',
+                active_only=True
+            )
+            cache['timestamp'] = now
+            self.logger.debug(f"Actions cache refreshed: {len(cache['data'])} actions")
+        
+        return cache['data']
+    
+    def _get_server_cached(self, server_id: int) -> Optional[Dict[str, Any]]:
+        """Get server info with caching (600s TTL)."""
+        now = time.time()
+        ttl = 600
+        
+        if server_id not in self._server_cache or (now - self._server_cache[server_id]['timestamp']) > ttl:
+            # Cache miss or expired - fetch from DB
+            server_data = self.server_manager.get_server(server_id, include_actions=True)
+            self._server_cache[server_id] = {
+                'data': server_data,
+                'timestamp': now
+            }
+            self.logger.debug(f"Server cache refreshed for server_id={server_id}")
+        
+        return self._server_cache[server_id]['data']
     
     def _get_historical_analysis(self, server_id: int, limit: int = 2) -> List[Dict[str, Any]]:
         """Get last N AI analysis results for historical context."""
@@ -356,7 +411,8 @@ class AIAnalyzer:
     async def _analyze_server(self, server_id: int):
         """Analyze metrics for a single server."""
         try:
-            server = self.server_manager.get_server(server_id, include_actions=True)
+            # Use cached server info
+            server = self._get_server_cached(server_id)
             if not server:
                 return
             
@@ -369,11 +425,8 @@ class AIAnalyzer:
             if not assigned_actions:
                 return
             
-            # Get ALL available command_get actions to enhance AI capability
-            all_get_actions = self.action_manager.get_all_actions(
-                action_type='command_get',
-                active_only=True
-            )
+            # Get ALL available command_get actions with caching
+            all_get_actions = self._get_all_get_actions_cached()
             
             # Get assigned command_execute actions
             execute_actions = [a for a in assigned_actions if a.get('action_type') == 'command_execute']
