@@ -106,8 +106,6 @@ def dashboard_page():
     
     # UI Components storage
     server_cards = {}
-    metric_charts = {}
-    ai_messages = []
     
     def get_server_metrics(server_id: int):
         """Get latest metrics for a server from Redis."""
@@ -185,7 +183,7 @@ def dashboard_page():
             LEFT JOIN actions a ON el.action_id = a.id
             WHERE aa.server_id = %s
             ORDER BY aa.analyzed_at DESC
-            LIMIT 50
+            LIMIT 40
             """,
             (server_id,)
         )
@@ -473,7 +471,7 @@ def dashboard_page():
                         
                         # Show recommended actions if any
                         if recommended_actions:
-                            with ui.expansion('💡 Recommended Actions', icon='lightbulb').classes('w-full mt-2 bg-white rounded border border-blue-200'):
+                            with ui.expansion('💡 AI Decisions', icon='lightbulb').classes('w-full mt-2 bg-white rounded border border-blue-200'):
                                 with ui.column().classes('w-full gap-2 p-2'):
                                     for action_idx, action_rec in enumerate(recommended_actions):
                                         action_name = action_rec.get('action_name', 'Unknown')
@@ -530,7 +528,7 @@ def dashboard_page():
             with ui.row().classes('w-full justify-between items-center mt-4 p-2 bg-purple-100 rounded animate-fade-in'):
                 with ui.row().classes('items-center gap-2'):
                     ui.icon('info', size='xs').classes('text-purple-600 animate-pulse')
-                    ui.label(f'{len(grouped)} AI analyses found').classes('text-caption text-purple-800 font-bold')
+                    ui.label(f'{len(grouped)} last AI analyses loaded').classes('text-caption text-purple-800 font-bold')
                     total_execs = sum(len(g.get('executions', [])) for g in grouped)
                     if total_execs > 0:
                         ui.label(f'• {total_execs} executed').classes('text-caption text-indigo-700 font-bold')
