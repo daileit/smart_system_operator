@@ -216,14 +216,14 @@ def main_page():
                         ui.badge('1', color='primary').classes('text-h6')
                         ui.icon('speed', color='primary').classes('text-4xl')
                         ui.label('Monitor').classes('text-subtitle1 font-bold')
-                        ui.label(f'Collect CPU & RAM metrics every {app_config.get("APP_CRON_INTERVAL", "60s")}').classes('text-caption text-grey-7 text-center')
+                        ui.label(f'Collect CPU & RAM metrics every {app_config.get("APP_CRAWLER_DELAY", "60s")}').classes('text-caption text-grey-7 text-center')
                 
                 with ui.card().classes('flex-1 bg-grey-1').style('min-width: 200px;'):
                     with ui.column().classes('gap-2 p-4 items-center'):
                         ui.badge('2', color='primary').classes('text-h6')
                         ui.icon('smart_toy', color='secondary').classes('text-4xl')
                         ui.label('Analyze').classes('text-subtitle1 font-bold')
-                        ui.label(f'AI analyzes with historical context every {app_config.get("APP_AI_ANALYSIS_INTERVAL", "300s")}').classes('text-caption text-grey-7 text-center')
+                        ui.label(f'AI analyzes with historical context every {app_config.get("APP_MODEL_DELAY", "300s")}').classes('text-caption text-grey-7 text-center')
                 
                 with ui.card().classes('flex-1 bg-grey-1').style('min-width: 200px;'):
                     with ui.column().classes('gap-2 p-4 items-center'):
