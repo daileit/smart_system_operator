@@ -45,6 +45,29 @@ class MetricsCrawler:
         """Get Redis key for server metrics queue."""
         return f"server_metrics:{server_id}"
     
+    def _parse_top_processes(self, output: str) -> List[Dict[str, Any]]:
+        """Parse top processes output to extract resource consumption."""
+        processes = []
+        try:
+            lines = output.strip().split('\n')
+            # Skip header line and parse process data
+            for line in lines[1:11]:  # Top 10 processes
+                parts = line.split()
+                if len(parts) >= 11:
+                    try:
+                        processes.append({
+                            'user': parts[0],
+                            'pid': parts[1],
+                            'cpu_percent': float(parts[2]),
+                            'mem_percent': float(parts[3]),
+                            'command': ' '.join(parts[10:])
+                        })
+                    except (ValueError, IndexError):
+                        continue
+        except Exception as e:
+            self.logger.warning(f"Error parsing top processes: {e}")
+        return processes
+    
     async def _collect_server_metrics(self, server: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """Collect metrics for a single server."""
         server_id = server['id']
@@ -96,11 +119,17 @@ class MetricsCrawler:
                     )
                     
                     if result.success:
-                        metrics['data'][action_name] = {
+                        metric_data = {
                             'output': result.output,
                             'execution_time': result.execution_time,
                             'collected_at': datetime.now().isoformat()
                         }
+                        
+                        # Parse top processes for resource consumption
+                        if action_name == 'get_top_processes':
+                            metric_data['parsed_processes'] = self._parse_top_processes(result.output)
+                        
+                        metrics['data'][action_name] = metric_data
                         self.logger.debug(f"Collected {action_name} for {server_name}")
                     else:
                         self.logger.warning(f"Failed to collect {action_name} for {server_name}: {result.error}")
@@ -219,6 +248,46 @@ class AIAnalyzer:
         """Get Redis key for server metrics queue."""
         return f"server_metrics:{server_id}"
     
+    def _get_historical_analysis(self, server_id: int) -> List[Dict[str, Any]]:
+        """Get last 2 AI analysis results for historical context."""
+        try:
+            historical = self.db.execute_query(
+                """
+                SELECT 
+                    ai_reasoning,
+                    execution_details,
+                    status,
+                    executed_at
+                FROM execution_logs
+                WHERE server_id = %s 
+                  AND execution_type = 'recommended'
+                  AND ai_reasoning IS NOT NULL
+                ORDER BY executed_at DESC
+                LIMIT 2
+                """,
+                (server_id,)
+            )
+            
+            results = []
+            for row in historical or []:
+                try:
+                    details = json.loads(row['execution_details']) if isinstance(row['execution_details'], str) else row['execution_details']
+                    results.append({
+                        'timestamp': row['executed_at'].isoformat() if row.get('executed_at') else 'Unknown',
+                        'reasoning': row.get('ai_reasoning', ''),
+                        'action_name': details.get('action_name', 'Unknown'),
+                        'status': row.get('status', 'unknown'),
+                        'details': details
+                    })
+                except Exception as e:
+                    self.logger.warning(f"Error parsing historical analysis: {e}")
+                    continue
+            
+            return results
+        except Exception as e:
+            self.logger.error(f"Error getting historical analysis: {e}")
+            return []
+    
     async def _analyze_server(self, server_id: int):
         """Analyze metrics for a single server."""
         try:
@@ -228,7 +297,7 @@ class AIAnalyzer:
                 self.logger.warning(f"Server {server_id} not found")
                 return
             
-            # Get metrics from Redis queue
+            # PART 1: Real-time data from Redis
             key = self._get_metrics_key(server_id)
             metrics_list = self.redis.get_json_list(key)
             
@@ -243,6 +312,9 @@ class AIAnalyzer:
                 return
             
             self.logger.info(f"Analyzing {len(recent_metrics)} metrics for server {server['name']} (ID: {server_id})")
+            
+            # PART 2: Historical AI analysis results (last 2)
+            historical_analysis = self._get_historical_analysis(server_id)
             
             # Get execution logs for context
             execution_logs = self.db.execute_query(
@@ -278,26 +350,46 @@ class AIAnalyzer:
                 self.logger.warning(f"No actions available for server {server['name']} (ID: {server_id})")
                 return
             
-            # Call OpenAI for analysis
+            # Prepare context data for AI
+            analysis_context = {
+                'realtime_metrics': recent_metrics,
+                'historical_analysis': historical_analysis,
+                'execution_logs': execution_logs,
+                'server_statistics': server_stats
+            }
+            
+            # Call OpenAI for analysis with enhanced context
             decision = self.openai.analyze_server_metrics(
                 server_info=server,
                 available_actions=available_actions,
                 execution_logs=execution_logs,
                 server_statistics=server_stats,
-                current_metrics=recent_metrics[0] if recent_metrics else None  # Most recent
+                current_metrics={
+                    'latest': recent_metrics[0] if recent_metrics else None,
+                    'recent_history': recent_metrics[1:] if len(recent_metrics) > 1 else [],
+                    'ai_history': historical_analysis
+                }
             )
             
-            # Store AI recommendation
+            # Store AI recommendation with enhanced context
             recommendation_data = {
                 'server_id': server_id,
                 'server_name': server['name'],
                 'timestamp': datetime.now().isoformat(),
                 'metrics_analyzed': len(recent_metrics),
+                'historical_context_used': len(historical_analysis),
                 'decision': decision.to_dict(),
                 'confidence': decision.confidence,
                 'risk_level': decision.risk_level,
                 'requires_approval': decision.requires_approval
             }
+            
+            self.logger.info(
+                f"AI analysis completed for {server['name']}: "
+                f"{len(decision.recommended_actions)} actions recommended, "
+                f"confidence: {decision.confidence:.2f}, risk: {decision.risk_level}, "
+                f"historical context: {len(historical_analysis)} previous analyses"
+            )
             
             # Log each recommended action
             for action_rec in decision.recommended_actions:
@@ -317,12 +409,6 @@ class AIAnalyzer:
                         json.dumps(action_rec)
                     )
                 )
-            
-            self.logger.info(
-                f"AI analysis completed for {server['name']}: "
-                f"{len(decision.recommended_actions)} actions recommended, "
-                f"confidence: {decision.confidence:.2f}, risk: {decision.risk_level}"
-            )
             
             # Auto-execute low-risk actions if automatic=TRUE
             if decision.risk_level == 'low' and not decision.requires_approval:

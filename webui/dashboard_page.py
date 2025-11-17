@@ -174,11 +174,34 @@ def dashboard_page():
             
             # Top Processes
             process_data = data.get('get_top_processes', {})
-            if 'output' in process_data:
+            if 'output' in process_data or 'parsed_processes' in process_data:
                 with ui.card().classes('w-full p-4 mb-4'):
-                    ui.label('Top Processes').classes('text-h6 mb-2')
-                    with ui.scroll_area().classes('h-[200px]'):
-                        ui.label(process_data['output']).classes('text-caption font-mono whitespace-pre')
+                    ui.label('Top Processes (Resource Consumption)').classes('text-h6 mb-2')
+                    
+                    # Show parsed process data if available
+                    if 'parsed_processes' in process_data and process_data['parsed_processes']:
+                        # Create table header
+                        with ui.row().classes('w-full gap-2 mb-2 text-caption font-bold border-b pb-2'):
+                            ui.label('PID').classes('w-[80px]')
+                            ui.label('CPU %').classes('w-[80px]')
+                            ui.label('MEM %').classes('w-[80px]')
+                            ui.label('Command').classes('flex-grow')
+                        
+                        # Process rows
+                        with ui.scroll_area().classes('h-[180px]'):
+                            for proc in process_data['parsed_processes']:
+                                cpu_color = 'text-red-600' if proc['cpu_percent'] > 50 else 'text-orange-600' if proc['cpu_percent'] > 25 else 'text-green-600'
+                                mem_color = 'text-red-600' if proc['mem_percent'] > 50 else 'text-orange-600' if proc['mem_percent'] > 25 else 'text-green-600'
+                                
+                                with ui.row().classes('w-full gap-2 mb-1 text-caption'):
+                                    ui.label(proc['pid']).classes('w-[80px] font-mono')
+                                    ui.label(f"{proc['cpu_percent']:.1f}%").classes(f'w-[80px] font-mono font-bold {cpu_color}')
+                                    ui.label(f"{proc['mem_percent']:.1f}%").classes(f'w-[80px] font-mono font-bold {mem_color}')
+                                    ui.label(proc['command'][:50] + '...' if len(proc['command']) > 50 else proc['command']).classes('flex-grow font-mono text-gray-700')
+                    else:
+                        # Fallback to raw output
+                        with ui.scroll_area().classes('h-[200px]'):
+                            ui.label(process_data.get('output', 'No data')).classes('text-caption font-mono whitespace-pre')
             
             # Last updated
             ui.label(f'Last updated: {timestamp}').classes('text-caption text-gray-500 mt-2')
