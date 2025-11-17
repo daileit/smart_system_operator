@@ -477,12 +477,16 @@ def dashboard_page():
                                 with ui.column().classes('w-full gap-2 p-2'):
                                     for action_idx, action_rec in enumerate(recommended_actions):
                                         action_name = action_rec.get('action_name', 'Unknown')
+                                        reasoning = action_rec.get('reasoning', '')
                                         priority = action_rec.get('priority', 5)
-                                        with ui.row().classes('items-center gap-2'):
-                                            ui.label(f'{action_idx + 1}.').classes('font-bold')
-                                            ui.label(action_name).classes('text-body2')
-                                            priority_color = 'red' if priority >= 8 else 'orange' if priority >= 5 else 'green'
-                                            ui.badge(f'P{priority}', color=priority_color).classes('text-xs')
+                                        with ui.column().classes('w-full gap-1 mb-2'):
+                                            with ui.row().classes('items-center gap-2'):
+                                                ui.label(f'{action_idx + 1}.').classes('font-bold')
+                                                ui.label(action_name).classes('text-body2 font-bold')
+                                                priority_color = 'red' if priority >= 8 else 'orange' if priority >= 5 else 'green'
+                                                ui.badge(f'P{priority}', color=priority_color).classes('text-xs')
+                                            if reasoning:
+                                                ui.label(reasoning).classes('text-caption text-gray-600 ml-6')
                         
                         # Show executions if any
                         if executions:
