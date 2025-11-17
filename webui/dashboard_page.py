@@ -455,7 +455,7 @@ def dashboard_page():
                             with ui.column().classes('gap-1'):
                                 with ui.row().classes('items-center gap-2'):
                                     ui.icon('psychology', size='sm').classes('text-purple-600 animate-pulse')
-                                    ui.label('AI Analysis').classes('text-subtitle2 font-bold text-blue-900')
+                                    ui.label(f'AI Agent {openai_client.model}').classes('text-subtitle2 font-bold text-blue-900')
                                 ui.label(timestamp).classes('text-caption text-gray-500')
                             with ui.row().classes('items-center gap-1'):
                                 # Risk level badge
