@@ -181,12 +181,13 @@ class OpenAIClient:
         - Vary your vocabulary - avoid phrases like "tình trạng bình thường", "cần theo dõi", "khuyến nghị"
         - Think like a system architect, not a checkbox ticker
         - Notice trends, anomalies, correlations - be insightful
-        - If nothing interesting to probe, confidently say server looks good
+        - If nothing interesting to say, don't be afraid to get one probe request
 
         REASONING FORMAT:
         - Overall: 1-2 sentences max, direct and insightful
         - Per-action: 1 sentence, specific and purposeful
         - Example: "CPU ổn định 45%, RAM 60% - hệ thống khỏe, không cần thêm data" (healthy)
+        - Example: "CPU ổn định - RAM dư - hệ thống khỏe toàn diện, đã lâu không check nên sẽ get data diskspace" (probe)
         - Example: "CPU nhảy vọt 89% bất thường - kiểm tra processes để tìm nguyên nhân" (problem)
 
         OUTPUT JSON:
@@ -236,15 +237,15 @@ class OpenAIClient:
             # Create user message with assigned actions info
             user_message = f"""SERVER: {json.dumps(server_info, indent=2, default=str)}
 
-ASSIGNED ACTION IDs: {json.dumps(assigned_action_ids)}
+            ASSIGNED ACTION IDs: {json.dumps(assigned_action_ids)}
 
-AVAILABLE ACTIONS: {json.dumps(available_actions, indent=2, default=str)}
+            AVAILABLE ACTIONS: {json.dumps(available_actions, indent=2, default=str)}
 
-RECENT LOGS: {json.dumps(execution_logs or [], indent=2, default=str)}
+            RECENT LOGS: {json.dumps(execution_logs or [], indent=2, default=str)}
 
-STATISTICS: {json.dumps(server_statistics or {}, indent=2, default=str)}
+            STATISTICS: {json.dumps(server_statistics or {}, indent=2, default=str)}
 
-CURRENT METRICS: {json.dumps(current_metrics or {}, indent=2, default=str)}"""
+            CURRENT METRICS: {json.dumps(current_metrics or {}, indent=2, default=str)}"""
             
             # Call OpenAI API
             response = self.client.chat.completions.create(
