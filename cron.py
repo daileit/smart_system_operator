@@ -76,7 +76,7 @@ class MetricsCrawler:
                     logger.debug(f"Collecting {action_name} for {server_name}")
                     result = self.action_manager.execute_action(
                         action_id=action_id,
-                        server_info=server,
+                        server_id=server_id,
                         params={}
                     )
                     
@@ -306,7 +306,7 @@ class AIAnalyzer:
         try:
             result = self.action_manager.execute_action(
                 action_id=action_id,
-                server_info=server,
+                server_id=server['id'],
                 params=action_rec.get('parameters', {})
             )
             
@@ -343,7 +343,7 @@ class AIAnalyzer:
             if self.server_manager.is_action_automatic(server_id, action_id):
                 result = self.action_manager.execute_action(
                     action_id=action_id,
-                    server_info=server,
+                    server_id=server_id,
                     params=action_rec.get('parameters', {})
                 )
                 
