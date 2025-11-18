@@ -50,8 +50,7 @@ class OpenAIClient:
         openai_config = env_config.Config(group="OPENAI")
         
         self.api_key = api_key or openai_config.get("OPENAI_API_KEY")
-        models = openai_config.get("OPENAI_MODEL", "gpt-4o")
-        model_config = model or models
+        self.model_config = model or openai_config.get("OPENAI_MODEL", "gpt-4o")
         self.base_url = base_url or openai_config.get("OPENAI_BASE_URL", "https://api.openai.com/v1")
         
         if not self.api_key:
@@ -59,7 +58,7 @@ class OpenAIClient:
             raise ValueError("OpenAI API key is required")
         
         # Parse model configuration - support comma-separated list for random selection
-        self.model_list = [m.strip() for m in model_config.split(',') if m.strip()]
+        self.model_list = [m.strip() for m in self.model_config.split(',') if m.strip()]
         if not self.model_list:
             self.model_list = ["gpt-4o"]
         
