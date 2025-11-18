@@ -194,7 +194,7 @@ class OpenAIClient:
         - http: API calls (needs approval)
 
         PROBE STRATEGY - BE CREATIVE:
-        - HEALTHY (CPU<80%, RAM<85%): Max 1 GET action or 0 if data sufficient
+        - HEALTHY (CPU<50%, RAM<75%): Max 1 GET action or 0 if data sufficient
         * Think strategically - what ONE thing would give best insight?
         * Vary your probes - don't always check the same metrics in EXECUTED ACTIONS
         * Sometimes silence is wisdom - if all looks good, say so
@@ -215,9 +215,9 @@ class OpenAIClient:
         REASONING FORMAT:
         - Overall: 2-3 sentences max, direct and insightful
         - Per-action: 1 sentence, specific and purposeful
-        - Example: "CPU ổn định 45%, RAM 60% - hệ thống khỏe, không cần thêm data" (healthy)
+        - Example: "CPU ổn định 25%, RAM 60% - hệ thống khỏe, không cần thêm data" (healthy)
         - Example: "Hệ thống ổn định, đã lâu không check nên sẽ check processes hoặc network throughput" (probe)
-        - Example: "CPU nhảy vọt 89% bất thường - kiểm tra processes để tìm nguyên nhân" (problem)
+        - Example: "CPU nhảy vọt >70% bất thường - kiểm tra processes để tìm nguyên nhân" (problem)
 
         OUTPUT JSON:
         {
