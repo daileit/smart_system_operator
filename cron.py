@@ -411,8 +411,7 @@ class AIAnalyzer:
             for action_rec in decision.recommended_actions:
                 action_id = action_rec.get('action_id')
                 
-                # Verify action is assigned to this server before executing
-                action_info = next((a for a in assigned_actions if a['id'] == action_id), None)
+                action_info = next((a for a in available_actions_for_ai if a['id'] == action_id), None)
                 
                 if action_info:
                     self.logger.info(f"Executing AI-recommended action_id={action_id} for {server['name']}")
