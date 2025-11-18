@@ -121,8 +121,9 @@ class OpenAIClient:
             client = OpenAI(api_key=api_key, base_url=base_url)
             models_response = client.models.list()
             
-            # Determine default model from config
-            default_model = openai_config.get("OPENAI_MODEL", "gpt-4o-mini")
+            # Determine default model(s) from config - support comma-separated list
+            default_model_config = openai_config.get("OPENAI_MODEL", "gpt-4o-mini")
+            default_model_list = [m.strip() for m in default_model_config.split(',') if m.strip()]
             
             # Detect provider from base_url for better labeling
             provider = "Unknown"
@@ -145,8 +146,8 @@ class OpenAIClient:
             for model in models_response.data:
                 model_id = model.id
                 
-                # Set default based on config
-                is_default = model_id == default_model
+                # Set default based on config - check if model is in the default list
+                is_default = model_id in default_model_list
                 
                 # Create friendly label from model ID
                 # Keep original ID for display but make it more readable
