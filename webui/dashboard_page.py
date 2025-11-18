@@ -16,73 +16,9 @@ def dashboard_page():
     ui.page_title(APP_TITLE)
     ui.add_head_html(f'<link rel="icon" href="{APP_LOGO_PATH}">')
     
-    # Add custom CSS for animations
-    ui.add_head_html('''
-    <style>
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(10px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-        
-        @keyframes slideIn {
-            from { opacity: 0; transform: translateX(-20px); }
-            to { opacity: 1; transform: translateX(0); }
-        }
-        
-        @keyframes pulse-glow {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.6; }
-        }
-        
-        @keyframes spin-slow {
-            from { transform: rotate(0deg); }
-            to { transform: rotate(360deg); }
-        }
-        
-        .animate-fade-in {
-            animation: fadeIn 0.5s ease-out;
-        }
-        
-        .animate-slide-in {
-            animation: slideIn 0.5s ease-out;
-        }
-        
-        .animate-pulse {
-            animation: pulse-glow 2s ease-in-out infinite;
-        }
-        
-        .animate-bounce {
-            animation: bounce 1s infinite;
-        }
-        
-        .animate-spin-slow {
-            animation: spin-slow 3s linear infinite;
-        }
-        
-        /* Smooth transitions for progress bars */
-        .q-linear-progress__track {
-            transition: all 0.5s ease-in-out !important;
-        }
-        
-        /* Hover effects */
-        .hover\\:shadow-lg:hover {
-            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
-            transform: translateY(-2px);
-            transition: all 0.3s ease;
-        }
-        
-        /* Live indicator pulse */
-        @keyframes live-pulse {
-            0% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.7); }
-            70% { box-shadow: 0 0 0 10px rgba(34, 197, 94, 0); }
-            100% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0); }
-        }
-        
-        .live-indicator {
-            animation: live-pulse 2s infinite;
-        }
-    </style>
-    ''')
+    # Add custom CSS from centralized file
+    ui.add_head_html('<link rel="stylesheet" href="/assets/css/animations.css">')
+    
     page_id = ui.context.client.page.path.lstrip('/')
     
     if not user_session.get('authenticated'):

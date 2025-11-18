@@ -19,38 +19,15 @@ def reports_page():
     ui.page_title(f"{APP_TITLE} - Reports & Analytics")
     ui.add_head_html(f'<link rel="icon" href="{APP_LOGO_PATH}">')
     
-    # Add Chart.js for charting
-    ui.add_head_html('''
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
-    <style>
-        .chart-container {
-            position: relative;
-            height: 400px;
-            width: 100%;
-        }
-        .report-card {
-            transition: all 0.3s ease;
-        }
-        .report-card:hover {
-            transform: translateY(-4px);
-            box-shadow: 0 12px 20px rgba(0,0,0,0.15);
-        }
-        .metric-badge {
-            animation: fadeInUp 0.5s ease-out;
-        }
-        @keyframes fadeInUp {
-            from {
-                opacity: 0;
-                transform: translateY(20px);
-            }
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
-        }
-    </style>
-    ''')
+    # Add custom CSS from centralized file
+    ui.add_head_html('<link rel="stylesheet" href="/assets/css/animations.css">')
+    
+    # Add Chart.js for charting (external CDN)
+    ui.add_head_html('<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>')
+    ui.add_head_html('<script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>')
+    
+    # Add custom chart utilities
+    ui.add_head_html('<script src="/assets/js/charts.js"></script>')
     
     page_id = ui.context.client.page.path.lstrip('/')
     
@@ -371,39 +348,14 @@ def reports_page():
                                 <canvas id="{canvas_id}"></canvas>
                             </div>
                             <script>
-                            (function() {{
-                                const ctx = document.getElementById('{canvas_id}').getContext('2d');
-                                new Chart(ctx, {{
-                                    type: 'line',
-                                    data: {{
-                                        labels: {json.dumps(dates)},
-                                        datasets: [{{
-                                            label: 'Success',
-                                            data: {json.dumps(success)},
-                                            borderColor: 'rgb(34, 197, 94)',
-                                            backgroundColor: 'rgba(34, 197, 94, 0.1)',
-                                            tension: 0.4
-                                        }}, {{
-                                            label: 'Failed',
-                                            data: {json.dumps(failed)},
-                                            borderColor: 'rgb(239, 68, 68)',
-                                            backgroundColor: 'rgba(239, 68, 68, 0.1)',
-                                            tension: 0.4
-                                        }}]
-                                    }},
-                                    options: {{
-                                        responsive: true,
-                                        maintainAspectRatio: false,
-                                        plugins: {{
-                                            legend: {{ position: 'top' }},
-                                            title: {{ display: false }}
-                                        }},
-                                        scales: {{
-                                            y: {{ beginAtZero: true }}
-                                        }}
-                                    }}
-                                }});
-                            }})();
+                                createTimeSeriesChart(
+                                    '{canvas_id}',
+                                    {json.dumps(dates)},
+                                    [
+                                        {{ label: 'Success', data: {json.dumps(success)}, color: 'green' }},
+                                        {{ label: 'Failed', data: {json.dumps(failed)}, color: 'red' }}
+                                    ]
+                                );
                             </script>
                             '''
                         else:
@@ -434,39 +386,13 @@ def reports_page():
                                 <canvas id="{canvas_id}"></canvas>
                             </div>
                             <script>
-                            (function() {{
-                                const ctx = document.getElementById('{canvas_id}').getContext('2d');
-                                new Chart(ctx, {{
-                                    type: 'bar',
-                                    data: {{
-                                        labels: {json.dumps(dates)},
-                                        datasets: [{{
-                                            label: 'Low Risk',
-                                            data: {json.dumps(low)},
-                                            backgroundColor: 'rgba(34, 197, 94, 0.8)'
-                                        }}, {{
-                                            label: 'Medium Risk',
-                                            data: {json.dumps(medium)},
-                                            backgroundColor: 'rgba(249, 115, 22, 0.8)'
-                                        }}, {{
-                                            label: 'High Risk',
-                                            data: {json.dumps(high)},
-                                            backgroundColor: 'rgba(239, 68, 68, 0.8)'
-                                        }}]
-                                    }},
-                                    options: {{
-                                        responsive: true,
-                                        maintainAspectRatio: false,
-                                        plugins: {{
-                                            legend: {{ position: 'top' }}
-                                        }},
-                                        scales: {{
-                                            x: {{ stacked: true }},
-                                            y: {{ stacked: true, beginAtZero: true }}
-                                        }}
-                                    }}
-                                }});
-                            }})();
+                                createRiskTimelineChart(
+                                    '{canvas_id}',
+                                    {json.dumps(dates)},
+                                    {json.dumps(low)},
+                                    {json.dumps(medium)},
+                                    {json.dumps(high)}
+                                );
                             </script>
                             '''
                         else:
@@ -521,30 +447,11 @@ def reports_page():
                             <canvas id="{canvas_id}"></canvas>
                         </div>
                         <script>
-                        (function() {{
-                            const ctx = document.getElementById('{canvas_id}').getContext('2d');
-                            new Chart(ctx, {{
-                                type: 'doughnut',
-                                data: {{
-                                    labels: {json.dumps(list(type_counts.keys()))},
-                                    datasets: [{{
-                                        data: {json.dumps(list(type_counts.values()))},
-                                        backgroundColor: [
-                                            'rgba(59, 130, 246, 0.8)',
-                                            'rgba(168, 85, 247, 0.8)',
-                                            'rgba(34, 197, 94, 0.8)'
-                                        ]
-                                    }}]
-                                }},
-                                options: {{
-                                    responsive: true,
-                                    maintainAspectRatio: false,
-                                    plugins: {{
-                                        legend: {{ position: 'right' }}
-                                    }}
-                                }}
-                            }});
-                        }})();
+                            createActionTypePieChart(
+                                '{canvas_id}',
+                                {json.dumps(list(type_counts.keys()))},
+                                {json.dumps(list(type_counts.values()))}
+                            );
                         </script>
                         '''
                 
@@ -567,33 +474,11 @@ def reports_page():
                             <canvas id="{canvas_id}"></canvas>
                         </div>
                         <script>
-                        (function() {{
-                            const ctx = document.getElementById('{canvas_id}').getContext('2d');
-                            new Chart(ctx, {{
-                                type: 'bar',
-                                data: {{
-                                    labels: {json.dumps(action_names)},
-                                    datasets: [{{
-                                        label: 'Success Rate (%)',
-                                        data: {json.dumps(success_rates)},
-                                        backgroundColor: 'rgba(34, 197, 94, 0.8)',
-                                        borderColor: 'rgba(34, 197, 94, 1)',
-                                        borderWidth: 1
-                                    }}]
-                                }},
-                                options: {{
-                                    responsive: true,
-                                    maintainAspectRatio: false,
-                                    indexAxis: 'y',
-                                    plugins: {{
-                                        legend: {{ display: false }}
-                                    }},
-                                    scales: {{
-                                        x: {{ beginAtZero: true, max: 100 }}
-                                    }}
-                                }}
-                            }});
-                        }})();
+                            createSuccessRateChart(
+                                '{canvas_id}',
+                                {json.dumps(action_names)},
+                                {json.dumps(success_rates)}
+                            );
                         </script>
                         '''
             
@@ -662,30 +547,11 @@ def reports_page():
                             <canvas id="{canvas_id}"></canvas>
                         </div>
                         <script>
-                        (function() {{
-                            const ctx = document.getElementById('{canvas_id}').getContext('2d');
-                            new Chart(ctx, {{
-                                type: 'bar',
-                                data: {{
-                                    labels: {json.dumps(server_names)},
-                                    datasets: [{{
-                                        label: 'Total Executions',
-                                        data: {json.dumps(exec_counts)},
-                                        backgroundColor: 'rgba(59, 130, 246, 0.8)'
-                                    }}]
-                                }},
-                                options: {{
-                                    responsive: true,
-                                    maintainAspectRatio: false,
-                                    plugins: {{
-                                        legend: {{ display: false }}
-                                    }},
-                                    scales: {{
-                                        y: {{ beginAtZero: true }}
-                                    }}
-                                }}
-                            }});
-                        }})();
+                            createServerExecutionsChart(
+                                '{canvas_id}',
+                                {json.dumps(server_names)},
+                                {json.dumps(exec_counts)}
+                            );
                         </script>
                         '''
                 
@@ -706,35 +572,12 @@ def reports_page():
                             <canvas id="{canvas_id}"></canvas>
                         </div>
                         <script>
-                        (function() {{
-                            const ctx = document.getElementById('{canvas_id}').getContext('2d');
-                            new Chart(ctx, {{
-                                type: 'bar',
-                                data: {{
-                                    labels: {json.dumps(server_names)},
-                                    datasets: [{{
-                                        label: 'Success',
-                                        data: {json.dumps(success_counts)},
-                                        backgroundColor: 'rgba(34, 197, 94, 0.8)'
-                                    }}, {{
-                                        label: 'Failed',
-                                        data: {json.dumps(failed_counts)},
-                                        backgroundColor: 'rgba(239, 68, 68, 0.8)'
-                                    }}]
-                                }},
-                                options: {{
-                                    responsive: true,
-                                    maintainAspectRatio: false,
-                                    plugins: {{
-                                        legend: {{ position: 'top' }}
-                                    }},
-                                    scales: {{
-                                        x: {{ stacked: true }},
-                                        y: {{ stacked: true, beginAtZero: true }}
-                                    }}
-                                }}
-                            }});
-                        }})();
+                            createSuccessVsFailedChart(
+                                '{canvas_id}',
+                                {json.dumps(server_names)},
+                                {json.dumps(success_counts)},
+                                {json.dumps(failed_counts)}
+                            );
                         </script>
                         '''
             
@@ -900,31 +743,12 @@ def reports_page():
                         <canvas id="{canvas_id}"></canvas>
                     </div>
                     <script>
-                    (function() {{
-                        const ctx = document.getElementById('{canvas_id}').getContext('2d');
-                        new Chart(ctx, {{
-                            type: 'bar',
-                            data: {{
-                                labels: {json.dumps(error_labels)},
-                                datasets: [{{
-                                    label: 'Occurrences',
-                                    data: {json.dumps(error_counts)},
-                                    backgroundColor: 'rgba(239, 68, 68, 0.8)'
-                                }}]
-                            }},
-                            options: {{
-                                responsive: true,
-                                maintainAspectRatio: false,
-                                indexAxis: 'y',
-                                plugins: {{
-                                    legend: {{ display: false }}
-                                }},
-                                scales: {{
-                                    x: {{ beginAtZero: true }}
-                                }}
-                            }}
-                        }});
-                    }})();
+                        // Using createServerExecutionsChart for horizontal bar display
+                        createServerExecutionsChart(
+                            '{canvas_id}',
+                            {json.dumps(error_labels)},
+                            {json.dumps(error_counts)}
+                        );
                     </script>
                     '''
             
