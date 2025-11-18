@@ -80,7 +80,11 @@ def check_openai_connection():
     try:
         openai_client = OpenAIClient()
         logger.info("OpenAI client initialized successfully")
-        return True if openai_client.fetch_available_models() is not None else False            
+        if openai_client.fetch_available_models() is not None:
+            return True
+        else:
+            logger.error("Failed to fetch available models from OpenAI")
+            return False
     except Exception as e:
         logger.error(f"OpenAI connection error: {e}")
         return False
