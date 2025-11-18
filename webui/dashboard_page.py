@@ -43,7 +43,7 @@ def dashboard_page():
     # UI Components storage
     server_cards = {}
 
-    models = [m.split('/')[-1] for m in openai_client.model_config]
+    models = [m.split('/')[-1] for m in openai_client.model_list]
     
     def get_server_metrics(server_id: int):
         """Get latest metrics for a server from Redis."""
@@ -349,7 +349,7 @@ def dashboard_page():
                         with ui.row().classes('items-center gap-2'):
                             ui.icon('smart_toy', size='sm').classes('text-white')
                             ui.label(f'Hello {username}! I\'m AI Operator').classes('text-h6 font-bold text-white')
-                        ui.label(f'Models: {", ".join(models)}').classes('text-caption text-white')
+                        ui.label(f'Using: {", ".join(models)}').classes('text-caption text-white')
                     ui.icon('auto_awesome', size='lg').classes('text-white opacity-30')
             
             # Get and group AI recommendations with executions
