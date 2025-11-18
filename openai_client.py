@@ -5,6 +5,7 @@ Provides AI-powered decision making for server actions based on metrics and logs
 
 import jsonlog
 import json
+import random
 from typing import Optional, Dict, List, Any, Tuple
 from dataclasses import dataclass
 from openai import OpenAI
@@ -42,18 +43,24 @@ class OpenAIClient:
         
         Args:
             api_key: OpenAI API key (defaults to env config)
-            model: Model to use (defaults to env config or gpt-4o)
+            model: Model(s) to use - can be a single model or comma-separated list for random selection
+                   (defaults to env config or gpt-4o)
             base_url: API base URL (defaults to env config or https://api.openai.com/v1)
         """
         openai_config = env_config.Config(group="OPENAI")
         
         self.api_key = api_key or openai_config.get("OPENAI_API_KEY")
-        self.model = model or openai_config.get("OPENAI_MODEL", "gpt-4o")
+        model_config = model or openai_config.get("OPENAI_MODEL", "gpt-4o")
         self.base_url = base_url or openai_config.get("OPENAI_BASE_URL", "https://api.openai.com/v1")
         
         if not self.api_key:
             logger.error("OpenAI API key not configured")
             raise ValueError("OpenAI API key is required")
+        
+        # Parse model configuration - support comma-separated list for random selection
+        self.model_list = [m.strip() for m in model_config.split(',') if m.strip()]
+        if not self.model_list:
+            self.model_list = ["gpt-4o"]
         
         # Initialize client with base_url support
         self.client = OpenAI(api_key=self.api_key, base_url=self.base_url)
@@ -62,7 +69,27 @@ class OpenAIClient:
         # Initialize system prompt
         self._init_system_prompt()
         
-        logger.info(f"OpenAI client initialized with base_url: {self.base_url}, model: {self.model}")
+        if len(self.model_list) > 1:
+            logger.info(f"OpenAI client initialized with base_url: {self.base_url}, "
+                       f"models: {self.model_list} (random selection enabled)")
+        else:
+            logger.info(f"OpenAI client initialized with base_url: {self.base_url}, "
+                       f"model: {self.model_list[0]}")
+    
+    def _get_model(self) -> str:
+        """
+        Get a model to use for the current request.
+        If multiple models are configured, randomly selects one.
+        
+        Returns:
+            Model name to use
+        """
+        if len(self.model_list) == 1:
+            return self.model_list[0]
+        
+        selected_model = random.choice(self.model_list)
+        self.logger.debug(f"Selected model: {selected_model} from {self.model_list}")
+        return selected_model
     
     @staticmethod
     def fetch_available_models(api_key: Optional[str] = None, base_url: Optional[str] = None) -> List[Tuple[str, str, bool, int]]:
@@ -238,9 +265,10 @@ class OpenAIClient:
 
             CURRENT METRICS: {json.dumps(current_metrics or {}, indent=2, default=str)}"""
             
-            # Call OpenAI API
+            # Call OpenAI API with selected model
+            selected_model = self._get_model()
             response = self.client.chat.completions.create(
-                model=self.model,
+                model=selected_model,
                 messages=[
                     {"role": "system", "content": self.system_prompt},
                     {"role": "user", "content": user_message}
@@ -309,8 +337,9 @@ class OpenAIClient:
 
             Recommend actions to address this specific issue. Be specific about parameters needed for each action."""
             
+            selected_model = self._get_model()
             response = self.client.chat.completions.create(
-                model=self.model,
+                model=selected_model,
                 messages=[
                     {"role": "system", "content": self.system_prompt},
                     {"role": "user", "content": user_message}
@@ -384,8 +413,9 @@ class OpenAIClient:
                 "prerequisites": ["<check1>", "<check2>"]
             }}"""
             
+            selected_model = self._get_model()
             response = self.client.chat.completions.create(
-                model=self.model,
+                model=selected_model,
                 messages=[
                     {"role": "system", "content": self.system_prompt},
                     {"role": "user", "content": user_message}
@@ -444,8 +474,9 @@ class OpenAIClient:
             Provide a brief, clear explanation of what happened and what it means. 
             Focus on actionable insights. If there are any warnings or issues, highlight them."""
             
+            selected_model = self._get_model()
             response = self.client.chat.completions.create(
-                model=self.model,
+                model=selected_model,
                 messages=[
                     {"role": "system", "content": "You are a helpful server operations assistant. "
                                                  "Explain technical output in clear, concise terms."},
@@ -504,8 +535,9 @@ class OpenAIClient:
                 "reasoning": "<overall strategy explanation>"
             }}"""
             
+            selected_model = self._get_model()
             response = self.client.chat.completions.create(
-                model=self.model,
+                model=selected_model,
                 messages=[
                     {"role": "system", "content": self.system_prompt},
                     {"role": "user", "content": user_message}
@@ -593,8 +625,9 @@ class OpenAIClient:
             
             messages.append({"role": "user", "content": context})
             
+            selected_model = self._get_model()
             response = self.client.chat.completions.create(
-                model=self.model,
+                model=selected_model,
                 messages=messages,
                 temperature=0.5,
                 max_tokens=500
