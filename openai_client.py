@@ -288,6 +288,7 @@ class OpenAIClient:
                         {"role": "user", "content": user_message}
                     ],
                     temperature=0.5,
+                    max_tokens=2048,
                     response_format={"type": "json_object"}
                 )
                 
@@ -377,6 +378,7 @@ class OpenAIClient:
                         {"role": "user", "content": user_message}
                     ],
                     temperature=0.3,
+                    max_tokens=2048,
                     response_format={"type": "json_object"}
                 )
                 
@@ -463,6 +465,7 @@ class OpenAIClient:
                     {"role": "user", "content": user_message}
                 ],
                 temperature=0.2,
+                max_tokens=2048,
                 response_format={"type": "json_object"}
             )
             
@@ -513,7 +516,7 @@ class OpenAIClient:
                     {"role": "user", "content": user_message}
                 ],
                 temperature=0.4,
-                max_tokens=300
+                max_tokens=1024
             )
             
             explanation = response.choices[0].message.content.strip()
@@ -563,6 +566,7 @@ class OpenAIClient:
                     {"role": "user", "content": user_message}
                 ],
                 temperature=0.3,
+                max_tokens=1024,
                 response_format={"type": "json_object"}
             )
             
@@ -638,7 +642,7 @@ class OpenAIClient:
                 model=selected_model,
                 messages=messages,
                 temperature=0.5,
-                max_tokens=500
+                max_tokens=1024
             )
             
             answer = response.choices[0].message.content.strip()
