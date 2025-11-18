@@ -297,7 +297,7 @@ class OpenAIClient:
             return decision
             
         except Exception as e:
-            self.logger.error(f"Error in AI analysis: {e}")
+            self.logger.error(f"Error in AI analysis: {e}. System prompt used: {self.system_prompt}. User message: {user_message}")
             # Return safe default decision
             return AIDecision(
                 recommended_actions=[],
