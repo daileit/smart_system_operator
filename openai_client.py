@@ -50,7 +50,8 @@ class OpenAIClient:
         openai_config = env_config.Config(group="OPENAI")
         
         self.api_key = api_key or openai_config.get("OPENAI_API_KEY")
-        model_config = model or openai_config.get("OPENAI_MODEL", "gpt-4o")
+        models = openai_config.get("OPENAI_MODEL", "gpt-4o")
+        model_config = model or models
         self.base_url = base_url or openai_config.get("OPENAI_BASE_URL", "https://api.openai.com/v1")
         
         if not self.api_key:
