@@ -18,7 +18,6 @@ from openai_client import OpenAIClient
 
 logger = jsonlog.setup_logger("cron")
 
-
 def _get_metrics_key(server_id: int) -> str:
     """Get Redis key for server metrics queue."""
     return f"smart_system:server_metrics:{server_id}"
@@ -88,7 +87,7 @@ class MetricsCrawler:
                     }
                     
                     if not result.success:
-                        self.logger.debug(f"Failed: {action_name} on {server_name}")
+                        self.logger.error(f"Failed: {action_name} on {server_name}")
                 
                 except Exception as e:
                     self.logger.error(f"Error collecting {action_name} for {server_name}: {e}")
@@ -416,6 +415,7 @@ class AIAnalyzer:
                 action_info = next((a for a in assigned_actions if a['id'] == action_id), None)
                 
                 if action_info:
+                    self.logger.info(f"Executing AI-recommended action_id={action_id} for {server['name']}")
                     get_data = await self._process_action(server, action_rec, action_info.get('action_type'), analysis_id)
                     if get_data:
                         additional_metrics.append(get_data)

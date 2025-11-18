@@ -245,7 +245,7 @@ class OpenAIClient:
                     {"role": "system", "content": self.system_prompt},
                     {"role": "user", "content": user_message}
                 ],
-                temperature=0.3,  # Lower temperature for more consistent decisions
+                temperature=0.5,
                 response_format={"type": "json_object"}
             )
             
