@@ -249,66 +249,81 @@ class OpenAIClient:
         Returns:
             AIDecision with recommended actions and reasoning
         """
-        try:
-            # If not provided, assume all actions are assigned (backward compatibility)
-            if assigned_action_ids is None:
-                assigned_action_ids = [a['id'] for a in available_actions]
-            
-            
-            # Create user message with assigned actions info
-            user_message = f"""SERVER: {json.dumps(server_info, indent=2, default=str)}
+        # If not provided, assume all actions are assigned (backward compatibility)
+        if assigned_action_ids is None:
+            assigned_action_ids = [a['id'] for a in available_actions]
+        
+        # Create user message with assigned actions info
+        user_message = f"""SERVER: {json.dumps(server_info, indent=2, default=str)}
 
-            ASSIGNED ACTION IDs: {json.dumps(assigned_action_ids)}
+        ASSIGNED ACTION IDs: {json.dumps(assigned_action_ids)}
 
-            AVAILABLE ACTIONS: {json.dumps(available_actions, indent=2, default=str)}
+        AVAILABLE ACTIONS: {json.dumps(available_actions, indent=2, default=str)}
 
-            YOUR EXECUTED ACTIONS' LOG: {json.dumps(execution_logs or [], indent=2, default=str)}
+        PREVIOUS EXECUTED ACTIONS: {json.dumps(execution_logs or [], indent=2, default=str)}
 
-            STATISTICS: {json.dumps(server_statistics or {}, indent=2, default=str)}
+        STATISTICS: {json.dumps(server_statistics or {}, indent=2, default=str)}
 
-            CURRENT METRICS: {json.dumps(current_metrics or {}, indent=2, default=str)}"""
-            
-            # Call OpenAI API with selected model
-            selected_model = self._get_model()
-            response = self.client.chat.completions.create(
-                model=selected_model,
-                messages=[
-                    {"role": "system", "content": self.system_prompt},
-                    {"role": "user", "content": user_message}
-                ],
-                temperature=0.5,
-                response_format={"type": "json_object"}
-            )
-            
-            # Parse response
-            result = json.loads(response.choices[0].message.content)
-            
-            # Create AIDecision object
-            decision = AIDecision(
-                recommended_actions=result.get('recommended_actions', []),
-                reasoning=result.get('reasoning', ''),
-                confidence=result.get('confidence', 0.0),
-                risk_level=result.get('risk_level', 'medium'),
-                requires_approval=result.get('requires_approval', True),
-                model=selected_model
-            )
-            
-            self.logger.info(f"AI ({selected_model}) analysis completed for {server_info.get('name')}: "
-                           f"{len(decision.recommended_actions)} actions recommended.")
-            
-            return decision
-            
-        except Exception as e:
-            self.logger.error(f"Error in AI analysis: {e}. System prompt used: {self.system_prompt}. User message: {user_message}")
-            # Return safe default decision
-            return AIDecision(
-                recommended_actions=[],
-                reasoning=f"Error during AI analysis: {str(e)}",
-                confidence=0.0,
-                risk_level='high',
-                requires_approval=True,
-                model=self._get_model()
-            )
+        CURRENT METRICS: {json.dumps(current_metrics or {}, indent=2, default=str)}"""
+        
+        # Retry logic: try up to 3 times (1 initial + 2 retries) with different models
+        max_retries = 2
+        last_error = None
+        attempted_models = []
+        
+        for attempt in range(max_retries + 1):
+            try:
+                # Get a model for this attempt
+                selected_model = self._get_model()
+                attempted_models.append(selected_model)
+                
+                if attempt > 0:
+                    self.logger.warning(f"Retry attempt {attempt}/{max_retries} with model: {selected_model}")
+                
+                # Call OpenAI API with selected model
+                response = self.client.chat.completions.create(
+                    model=selected_model,
+                    messages=[
+                        {"role": "system", "content": self.system_prompt},
+                        {"role": "user", "content": user_message}
+                    ],
+                    temperature=0.5,
+                    response_format={"type": "json_object"}
+                )
+                
+                # Parse response
+                result = json.loads(response.choices[0].message.content)
+                
+                # Create AIDecision object
+                decision = AIDecision(
+                    recommended_actions=result.get('recommended_actions', []),
+                    reasoning=result.get('reasoning', ''),
+                    confidence=result.get('confidence', 0.0),
+                    risk_level=result.get('risk_level', 'medium'),
+                    requires_approval=result.get('requires_approval', True),
+                    model=selected_model
+                )
+                
+                self.logger.info(f"AI ({selected_model}) analysis completed for {server_info.get('name')}: "
+                               f"{len(decision.recommended_actions)} actions recommended.")
+                
+                return decision
+                
+            except Exception as e:
+                last_error = e
+                self.logger.error(f"Error with model {selected_model} (attempt {attempt + 1}/{max_retries + 1}): {e}")                
+                if attempt == max_retries:
+                    break
+
+        self.logger.error(f"All {max_retries + 1} attempts failed. Attempted models: {attempted_models}. Last error: {last_error}")
+        return AIDecision(
+            recommended_actions=[],
+            reasoning=f"Error during AI analysis after {max_retries + 1} attempts with models {attempted_models}: {str(last_error)}",
+            confidence=0.0,
+            risk_level='high',
+            requires_approval=True,
+            model=attempted_models[-1] if attempted_models else 'unknown'
+        )
     
     def analyze_specific_issue(self,
                               server_info: Dict[str, Any],
@@ -327,57 +342,77 @@ class OpenAIClient:
         Returns:
             AIDecision with recommended actions
         """
-        try:
-            user_message = f"""A specific issue has been reported for this server:
+        user_message = f"""A specific issue has been reported for this server:
 
-            ISSUE: {issue_description}
+        ISSUE: {issue_description}
 
-            SERVER: {server_info.get('name')} ({server_info.get('ip_address')})
+        SERVER: {server_info.get('name')} ({server_info.get('ip_address')})
 
-            AVAILABLE ACTIONS:
-            {json.dumps(available_actions, indent=2, default=str)}
+        AVAILABLE ACTIONS:
+        {json.dumps(available_actions, indent=2, default=str)}
 
-            RECENT LOGS:
-            {json.dumps(execution_logs or [], indent=2, default=str)}
+        RECENT LOGS:
+        {json.dumps(execution_logs or [], indent=2, default=str)}
 
-            Recommend actions to address this specific issue. Be specific about parameters needed for each action."""
-            
-            selected_model = self._get_model()
-            response = self.client.chat.completions.create(
-                model=selected_model,
-                messages=[
-                    {"role": "system", "content": self.system_prompt},
-                    {"role": "user", "content": user_message}
-                ],
-                temperature=0.3,
-                response_format={"type": "json_object"}
-            )
-            
-            result = json.loads(response.choices[0].message.content)
-            
-            decision = AIDecision(
-                recommended_actions=result.get('recommended_actions', []),
-                reasoning=result.get('reasoning', ''),
-                confidence=result.get('confidence', 0.0),
-                risk_level=result.get('risk_level', 'medium'),
-                requires_approval=result.get('requires_approval', True),
-                model=selected_model
-            )
-            
-            self.logger.info(f"AI ({selected_model}) issue analysis completed: {len(decision.recommended_actions)} actions recommended")
-            
-            return decision
-            
-        except Exception as e:
-            self.logger.error(f"Error in issue analysis: {e}")
-            return AIDecision(
-                recommended_actions=[],
-                reasoning=f"Error during issue analysis: {str(e)}",
-                confidence=0.0,
-                risk_level='high',
-                requires_approval=True,
-                model=self._get_model()
-            )
+        Recommend actions to address this specific issue. Be specific about parameters needed for each action."""
+        
+        # Retry logic: try up to 3 times (1 initial + 2 retries) with different models
+        max_retries = 2
+        last_error = None
+        attempted_models = []
+        
+        for attempt in range(max_retries + 1):
+            try:
+                # Get a model for this attempt
+                selected_model = self._get_model()
+                attempted_models.append(selected_model)
+                
+                if attempt > 0:
+                    self.logger.warning(f"Retry attempt {attempt}/{max_retries} with model: {selected_model}")
+                
+                response = self.client.chat.completions.create(
+                    model=selected_model,
+                    messages=[
+                        {"role": "system", "content": self.system_prompt},
+                        {"role": "user", "content": user_message}
+                    ],
+                    temperature=0.3,
+                    response_format={"type": "json_object"}
+                )
+                
+                result = json.loads(response.choices[0].message.content)
+                
+                decision = AIDecision(
+                    recommended_actions=result.get('recommended_actions', []),
+                    reasoning=result.get('reasoning', ''),
+                    confidence=result.get('confidence', 0.0),
+                    risk_level=result.get('risk_level', 'medium'),
+                    requires_approval=result.get('requires_approval', True),
+                    model=selected_model
+                )
+                
+                self.logger.info(f"AI ({selected_model}) issue analysis completed: {len(decision.recommended_actions)} actions recommended")
+                
+                return decision
+                
+            except Exception as e:
+                last_error = e
+                self.logger.error(f"Error with model {selected_model} (attempt {attempt + 1}/{max_retries + 1}): {e}")
+                
+                # If this was the last attempt, break and return error decision
+                if attempt == max_retries:
+                    break
+        
+        # All retries failed, return safe default decision
+        self.logger.error(f"All {max_retries + 1} attempts failed. Attempted models: {attempted_models}. Last error: {last_error}")
+        return AIDecision(
+            recommended_actions=[],
+            reasoning=f"Error during issue analysis after {max_retries + 1} attempts with models {attempted_models}: {str(last_error)}",
+            confidence=0.0,
+            risk_level='high',
+            requires_approval=True,
+            model=attempted_models[-1] if attempted_models else 'unknown'
+        )
     
     def validate_action(self,
                        server_info: Dict[str, Any],
@@ -456,18 +491,6 @@ class OpenAIClient:
                                 action_info: Dict[str, Any],
                                 execution_result: str,
                                 was_successful: bool) -> str:
-        """
-        Explain an action execution result in human-readable terms.
-        
-        Args:
-            server_info: Server details
-            action_info: Action that was executed
-            execution_result: Raw output from execution
-            was_successful: Whether execution succeeded
-            
-        Returns:
-            Human-readable explanation
-        """
         try:
             user_message = f"""Explain this execution result in clear, concise terms:
 
@@ -506,16 +529,6 @@ class OpenAIClient:
     def suggest_monitoring_strategy(self,
                                    server_info: Dict[str, Any],
                                    available_actions: List[Dict[str, Any]]) -> Dict[str, Any]:
-        """
-        Suggest a monitoring strategy for a server.
-        
-        Args:
-            server_info: Server details
-            available_actions: Available actions for monitoring
-            
-        Returns:
-            Monitoring strategy with recommended actions and schedules
-        """
         try:
             # Filter to only get monitoring actions
             monitoring_actions = [a for a in available_actions if a.get('action_type') == 'command_get']
@@ -596,18 +609,6 @@ class OpenAIClient:
                          user_question: str,
                          execution_logs: Optional[List[Dict[str, Any]]] = None,
                          conversation_history: Optional[List[Dict[str, str]]] = None) -> str:
-        """
-        Chat interface for asking questions about a server.
-        
-        Args:
-            server_info: Server details
-            user_question: User's question
-            execution_logs: Recent execution logs for context
-            conversation_history: Previous messages in conversation
-            
-        Returns:
-            AI response
-        """
         try:
             messages = [
                 {"role": "system", "content": self.system_prompt + 
