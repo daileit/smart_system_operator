@@ -206,7 +206,7 @@ def dashboard_page():
             with ui.card().classes('w-full p-4 mb-4 shadow-lg bg-gradient-to-r from-blue-500 to-blue-600'):
                 with ui.row().classes('w-full justify-between items-center'):
                     with ui.column().classes('gap-1'):
-                        ui.label(f"{server['name']}").classes('text-h5 font-bold text-white')
+                        ui.label(f"Server {server['name']}").classes('text-h5 font-bold text-white')
                         with ui.row().classes('items-center gap-2'):
                             ui.icon('location_on', size='xs').classes('text-white')
                             ui.label(f"{server['ip_address']}:{server['port']}").classes('text-body2 text-white')
@@ -345,7 +345,7 @@ def dashboard_page():
                     with ui.column().classes('gap-1'):
                         with ui.row().classes('items-center gap-2'):
                             ui.icon('smart_toy', size='sm').classes('text-white')
-                            ui.label('AI Recommendations').classes('text-h6 font-bold text-white')
+                            ui.label(f'Hello {username}! I\'m AI Operator').classes('text-h6 font-bold text-white')
                         ui.label(f'Analyzing {server["name"]} with models: {openai_client.model_config}').classes('text-caption text-white')
                     ui.icon('auto_awesome', size='lg').classes('text-white opacity-30')
             
