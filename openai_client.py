@@ -22,6 +22,7 @@ class AIDecision:
     confidence: float
     risk_level: str  # 'low', 'medium', 'high'
     requires_approval: bool
+    model: str  # Model used for this analysis
     
     def to_dict(self) -> Dict[str, Any]:
         """Convert AIDecision to dictionary."""
@@ -30,7 +31,8 @@ class AIDecision:
             'reasoning': self.reasoning,
             'confidence': self.confidence,
             'risk_level': self.risk_level,
-            'requires_approval': self.requires_approval
+            'requires_approval': self.requires_approval,
+            'model': self.model
         }
 
 
@@ -287,7 +289,8 @@ class OpenAIClient:
                 reasoning=result.get('reasoning', ''),
                 confidence=result.get('confidence', 0.0),
                 risk_level=result.get('risk_level', 'medium'),
-                requires_approval=result.get('requires_approval', True)
+                requires_approval=result.get('requires_approval', True),
+                model=selected_model
             )
             
             self.logger.info(f"AI analysis completed for server {server_info.get('name')}: "
@@ -303,7 +306,8 @@ class OpenAIClient:
                 reasoning=f"Error during AI analysis: {str(e)}",
                 confidence=0.0,
                 risk_level='high',
-                requires_approval=True
+                requires_approval=True,
+                model=self._get_model()
             )
     
     def analyze_specific_issue(self,
@@ -356,7 +360,8 @@ class OpenAIClient:
                 reasoning=result.get('reasoning', ''),
                 confidence=result.get('confidence', 0.0),
                 risk_level=result.get('risk_level', 'medium'),
-                requires_approval=result.get('requires_approval', True)
+                requires_approval=result.get('requires_approval', True),
+                model=selected_model
             )
             
             self.logger.info(f"AI issue analysis completed: {len(decision.recommended_actions)} actions recommended")
@@ -370,7 +375,8 @@ class OpenAIClient:
                 reasoning=f"Error during issue analysis: {str(e)}",
                 confidence=0.0,
                 risk_level='high',
-                requires_approval=True
+                requires_approval=True,
+                model=self._get_model()
             )
     
     def validate_action(self,

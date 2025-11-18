@@ -256,8 +256,8 @@ class AIAnalyzer:
             affected_rows, analysis_id = self.db.execute_update(
                 """
                 INSERT INTO ai_analysis 
-                (server_id, reasoning, confidence, risk_level, requires_approval, recommended_actions)
-                VALUES (%s, %s, %s, %s, %s, %s)
+                (server_id, reasoning, confidence, risk_level, requires_approval, recommended_actions, model)
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
                 """,
                 (
                     server_id,
@@ -265,7 +265,8 @@ class AIAnalyzer:
                     decision.confidence,
                     decision.risk_level,
                     decision.requires_approval,
-                    json.dumps(decision.recommended_actions)
+                    json.dumps(decision.recommended_actions),
+                    decision.model
                 )
             )
             return analysis_id

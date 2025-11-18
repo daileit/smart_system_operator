@@ -106,6 +106,7 @@ def dashboard_page():
                 aa.requires_approval,
                 aa.recommended_actions,
                 aa.analyzed_at,
+                aa.model,
                 el.id as exec_id,
                 el.action_id,
                 a.action_name,
@@ -376,6 +377,7 @@ def dashboard_page():
                     reasoning = analysis.get('reasoning', 'No reasoning provided')
                     confidence = analysis.get('confidence', 0.0)
                     risk_level = analysis.get('risk_level', 'unknown')
+                    ai_model = analysis.get('model', 'AI Model')
                     recommended_actions = analysis.get('recommended_actions', [])
                     
                     # AI message card with enhanced styling and animation
@@ -389,7 +391,7 @@ def dashboard_page():
                             with ui.column().classes('gap-1'):
                                 with ui.row().classes('items-center gap-2'):
                                     ui.icon('psychology', size='sm').classes('text-purple-600 animate-pulse')
-                                    ui.label(f'AI Agent: ({openai_client.model_config})').classes('text-subtitle2 font-bold text-blue-900')
+                                    ui.label(f'AI Agent: ({ai_model})').classes('text-subtitle2 font-bold text-blue-900')
                                 ui.label(timestamp).classes('text-caption text-gray-500')
                             with ui.row().classes('items-center gap-1'):
                                 # Risk level badge

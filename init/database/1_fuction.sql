@@ -58,7 +58,7 @@ CREATE TABLE IF NOT EXISTS server_allowed_actions (
     id INT PRIMARY KEY AUTO_INCREMENT,
     server_id INT NOT NULL,
     action_id INT NOT NULL,
-    automatic BOOLEAN DEFAULT FALSE, -- FALSE = advisory only, TRUE = auto execute
+    automatic BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (server_id) REFERENCES servers(id) ON DELETE CASCADE,
     FOREIGN KEY (action_id) REFERENCES actions(id) ON DELETE CASCADE,
@@ -71,11 +71,12 @@ CREATE TABLE IF NOT EXISTS server_allowed_actions (
 CREATE TABLE IF NOT EXISTS ai_analysis (
     id INT PRIMARY KEY AUTO_INCREMENT,
     server_id INT NOT NULL,
-    reasoning TEXT NOT NULL, -- AI's analysis/observation
+    reasoning TEXT NOT NULL, -- Aanalysis/observation
     confidence DECIMAL(3,2), -- 0.00 to 1.00
     risk_level ENUM('low', 'medium', 'high') NOT NULL,
     requires_approval BOOLEAN DEFAULT FALSE,
     recommended_actions JSON, -- Array of recommended action details
+    model VARCHAR(100),
     analyzed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (server_id) REFERENCES servers(id) ON DELETE CASCADE,
     INDEX idx_server_date (server_id, analyzed_at),
@@ -105,7 +106,7 @@ CREATE TABLE IF NOT EXISTS execution_logs (
 -- ===== COMMAND EXECUTE ACTIONS =====
 INSERT IGNORE INTO actions (action_name, action_type, description) VALUES
 ('reboot_system', 'command_execute', 'Reboot the server system immediately. Use when system is unresponsive or after critical updates. MEDIUM RISK - causes downtime.'),
-('restart_service', 'command_execute', 'Restart a specific systemd service. Useful for applying configuration changes or recovering from service failures. MEDIUM RISK - brief service interruption.'),
+('restart_service', 'command_execute', 'Restart a specific systemd service. Useful for applying configuration changes or recovering from service failures. LOW RISK - brief service interruption.'),
 ('stop_service', 'command_execute', 'Stop a specific systemd service. Use to halt misbehaving services or for maintenance. MEDIUM RISK - service becomes unavailable.'),
 ('start_service', 'command_execute', 'Start a specific systemd service. Use to bring services online after maintenance or failures. LOW RISK - restores service availability.'),
 ('block_ip_firewalld', 'command_execute', 'Block a specific IP address using firewalld. Use to prevent access from malicious or problematic IPs. MEDIUM RISK - may block legitimate traffic.'),
@@ -149,6 +150,4 @@ INSERT IGNORE INTO command_configs (action_id, command_template, timeout_seconds
 ((SELECT id FROM actions WHERE action_name = 'get_top_processes'), 'ps aux --sort=-%cpu | head -10', 5);
 -- ((SELECT id FROM actions WHERE action_name = 'get_process_list'), 'ps aux | grep ${process_name} | grep -v grep', 5),
 -- ((SELECT id FROM actions WHERE action_name = 'get_network_connections'), 'ss -tuln | grep ${port}', 5),
--- ((SELECT id FROM actions WHERE action_name = 'get_system_load'), 'uptime', 5),
--- ((SELECT id FROM actions WHERE action_name = 'get_uptime'), 'uptime -p && uptime -s', 5),
 
