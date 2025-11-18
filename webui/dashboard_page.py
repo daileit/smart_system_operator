@@ -346,7 +346,7 @@ def dashboard_page():
                         with ui.row().classes('items-center gap-2'):
                             ui.icon('smart_toy', size='sm').classes('text-white')
                             ui.label('AI Recommendations').classes('text-h6 font-bold text-white')
-                        ui.label(f'Analyzing {server["name"]}').classes('text-caption text-white')
+                        ui.label(f'Analyzing {server["name"]} with models: {openai_client.model_config}').classes('text-caption text-white')
                     ui.icon('auto_awesome', size='lg').classes('text-white opacity-30')
             
             # Get and group AI recommendations with executions
