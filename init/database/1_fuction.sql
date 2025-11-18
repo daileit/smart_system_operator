@@ -147,7 +147,7 @@ INSERT IGNORE INTO command_configs (action_id, command_template, timeout_seconds
 ((SELECT id FROM actions WHERE action_name = 'get_failed_services'), 'sudo systemctl list-units --state=failed --no-pager', 10),
 ((SELECT id FROM actions WHERE action_name = 'get_system_load'), 'uptime', 5),
 ((SELECT id FROM actions WHERE action_name = 'get_uptime'), 'uptime -p && uptime -s', 5),
-((SELECT id FROM actions WHERE action_name = 'get_top_processes'), 'ps aux --sort=-%cpu | head -11 | awk \'NR==1 || NR>1 {printf "%-10s %6s %5s %5s %s\n", $1, $2, $3, $4, $11}\'', 5);
+((SELECT id FROM actions WHERE action_name = 'get_top_processes'), 'ps aux --sort=-%cpu | head -11 | awk \'NR==1 || NR>1 {printf "%-10s %6s %5s %5s %s\\n", $1, $2, $3, $4, $11}\'', 5);
 -- ((SELECT id FROM actions WHERE action_name = 'get_process_list'), 'ps aux | grep ${process_name} | grep -v grep', 5),
 -- ((SELECT id FROM actions WHERE action_name = 'get_network_connections'), 'ss -tuln | grep ${port}', 5),
 
