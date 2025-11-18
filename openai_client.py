@@ -293,8 +293,8 @@ class OpenAIClient:
                 model=selected_model
             )
             
-            self.logger.info(f"AI analysis completed for server {server_info.get('name')}: "
-                           f"{len(decision.recommended_actions)} actions recommended")
+            self.logger.info(f"AI ({selected_model}) analysis completed for {server_info.get('name')}: "
+                           f"{len(decision.recommended_actions)} actions recommended.")
             
             return decision
             
@@ -364,7 +364,7 @@ class OpenAIClient:
                 model=selected_model
             )
             
-            self.logger.info(f"AI issue analysis completed: {len(decision.recommended_actions)} actions recommended")
+            self.logger.info(f"AI ({selected_model}) issue analysis completed: {len(decision.recommended_actions)} actions recommended")
             
             return decision
             
