@@ -260,7 +260,7 @@ class OpenAIClient:
 
         AVAILABLE ACTIONS: {json.dumps(available_actions, indent=2, default=str)}
 
-        PREVIOUS EXECUTED ACTIONS: {json.dumps(execution_logs or [], indent=2, default=str)}
+        COMMAND EXECUTION RESULTS: {json.dumps(execution_logs or [], indent=2, default=str)}
 
         STATISTICS: {json.dumps(server_statistics or {}, indent=2, default=str)}
 
