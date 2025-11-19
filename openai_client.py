@@ -95,7 +95,7 @@ class OpenAIClient:
             Model name to use
         """
         if ignore_model and self.redis:
-            ignore_key = f"smart_system:ignored_models:{ignore_model}"
+            ignore_key = f"smart_system:ignored_model:{ignore_model}"
             try:
                 self.redis.set_string(ignore_key, "1", ttl=7200)
                 self.logger.info(f"Cached ignored model: {ignore_model} (TTL: 7200s)")
@@ -110,7 +110,7 @@ class OpenAIClient:
         for attempt in range(max_attempts):
             selected_model = random.choice(self.model_list)            
             if self.redis:
-                ignore_key = f"smart_system:ignored_models:{selected_model}"
+                ignore_key = f"smart_system:ignored_model:{selected_model}"
                 try:
                     if self.redis.exists(ignore_key):
                         self.logger.debug(f"Model {selected_model} is ignored, retrying... (attempt {attempt + 1}/{max_attempts})")
