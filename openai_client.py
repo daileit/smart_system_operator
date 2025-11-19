@@ -10,6 +10,7 @@ from typing import Optional, Dict, List, Any, Tuple
 from dataclasses import dataclass
 from openai import OpenAI
 import config as env_config
+from redis_cache import RedisClient
 
 logger = jsonlog.setup_logger("openai_client")
 
@@ -68,6 +69,13 @@ class OpenAIClient:
         self.client = OpenAI(api_key=self.api_key, base_url=self.base_url)
         self.logger = logger
         
+        # Initialize Redis client for model ignore cache
+        try:
+            self.redis = RedisClient()
+        except Exception as e:
+            self.logger.warning(f"Redis client initialization failed: {e}. Model ignore cache disabled.")
+            self.redis = None
+        
         # Initialize system prompt
         self._init_system_prompt()
         
@@ -78,19 +86,43 @@ class OpenAIClient:
             logger.info(f"OpenAI client initialized with base_url: {self.base_url}, "
                        f"model: {self.model_list[0]}")
     
-    def _get_model(self) -> str:
+    def _get_model(self, ignore_model: str = "") -> str:
         """
-        Get a model to use for the current request.
-        If multiple models are configured, randomly selects one.
-        
+        Get a model to use for the current request.        
+        Args:
+            ignore_model: Model name to ignore and cache for 2 hours (7200s)        
         Returns:
             Model name to use
         """
+        if ignore_model and self.redis:
+            ignore_key = f"smart_system:ignored_models:{ignore_model}"
+            try:
+                self.redis.set_string(ignore_key, "1", ttl=7200)
+                self.logger.info(f"Cached ignored model: {ignore_model} (TTL: 7200s)")
+            except Exception as e:
+                self.logger.warning(f"Failed to cache ignored model {ignore_model}: {e}")
+        
         if len(self.model_list) == 1:
             return self.model_list[0]
         
+        max_attempts = len(self.model_list)
+        
+        for attempt in range(max_attempts):
+            selected_model = random.choice(self.model_list)            
+            if self.redis:
+                ignore_key = f"smart_system:ignored_models:{selected_model}"
+                try:
+                    if self.redis.exists(ignore_key):
+                        self.logger.debug(f"Model {selected_model} is ignored, retrying... (attempt {attempt + 1}/{max_attempts})")
+                        continue
+                except Exception as e:
+                    self.logger.warning(f"Failed to check ignore cache for {selected_model}: {e}")
+
+            self.logger.debug(f"Selected model: {selected_model} from {self.model_list}")
+            return selected_model
+
         selected_model = random.choice(self.model_list)
-        self.logger.debug(f"Selected model: {selected_model} from {self.model_list}")
+        self.logger.warning(f"All models are ignored. Returning random model anyway: {selected_model}")
         return selected_model
     
     @staticmethod
@@ -118,46 +150,23 @@ class OpenAIClient:
                 logger.error("OPENAI_API_KEY not configured")
                 return None
             
-            # Initialize client with base_url
             client = OpenAI(api_key=api_key, base_url=base_url)
             models_response = client.models.list()
             
-            # Determine default model(s) from config - support comma-separated list
-            default_model_config = openai_config.get("OPENAI_MODEL", "gpt-4o-mini")
+            default_model_config = openai_config.get("OPENAI_MODEL", "gpt-4o")
             default_model_list = [m.strip() for m in default_model_config.split(',') if m.strip()]
             
-            # Detect provider from base_url for better labeling
-            provider = "Unknown"
-            if 'openai.com' in base_url.lower():
-                provider = "OpenAI"
-            elif 'azure' in base_url.lower():
-                provider = "Azure OpenAI"
-            elif 'localhost' in base_url.lower() or '127.0.0.1' in base_url:
-                if '11434' in base_url:
-                    provider = "Ollama"
-                elif '1234' in base_url:
-                    provider = "LM Studio"
-                else:
-                    provider = "Local"
-            
-            # Collect all available models (no filtering)
+
             available_models = []
             display_order = 1
             
             for model in models_response.data:
                 model_id = model.id
                 
-                # Set default based on config - check if model is in the default list
                 is_default = model_id in default_model_list
                 
-                # Create friendly label from model ID
-                # Keep original ID for display but make it more readable
                 label = model_id.replace('_', ' ').replace('-', ' ').title()
-                
-                # Add provider suffix if not local
-                if provider != "Unknown" and provider != "Local":
-                    label = f"{label} ({provider})"
-                
+                             
                 available_models.append((model_id, label, is_default, display_order))
                 display_order += 1
             
@@ -171,7 +180,7 @@ class OpenAIClient:
                 logger.warning(f"No models found from {base_url}")
                 return None
             
-            logger.info(f"Fetched {len(available_models)} available models from {base_url} ({provider})")
+            logger.info(f"Fetched {len(available_models)} available models from {base_url}")
             return available_models
             
         except Exception as e:
@@ -270,11 +279,12 @@ class OpenAIClient:
         max_retries = 2
         last_error = None
         attempted_models = []
+        last_failed_model = None
         
         for attempt in range(max_retries + 1):
             try:
-                # Get a model for this attempt
-                selected_model = self._get_model()
+                # Get a model for this attempt, ignoring the last failed model
+                selected_model = self._get_model(ignore_model=last_failed_model if last_failed_model else "")
                 attempted_models.append(selected_model)
                 
                 if attempt > 0:
@@ -312,6 +322,7 @@ class OpenAIClient:
                 
             except Exception as e:
                 last_error = e
+                last_failed_model = selected_model
                 self.logger.error(f"Error with model {selected_model} (attempt {attempt + 1}/{max_retries + 1}): {e}")                
                 if attempt == max_retries:
                     break
@@ -356,16 +367,16 @@ class OpenAIClient:
         {json.dumps(execution_logs or [], indent=2, default=str)}
 
         Recommend actions to address this specific issue. Be specific about parameters needed for each action."""
-        
-        # Retry logic: try up to 3 times (1 initial + 2 retries) with different models
+
         max_retries = 2
         last_error = None
         attempted_models = []
+        last_failed_model = None
         
         for attempt in range(max_retries + 1):
             try:
-                # Get a model for this attempt
-                selected_model = self._get_model()
+                # Get a model for this attempt, ignoring the last failed model
+                selected_model = self._get_model(ignore_model=last_failed_model if last_failed_model else "")
                 attempted_models.append(selected_model)
                 
                 if attempt > 0:
@@ -399,9 +410,8 @@ class OpenAIClient:
                 
             except Exception as e:
                 last_error = e
+                last_failed_model = selected_model
                 self.logger.error(f"Error with model {selected_model} (attempt {attempt + 1}/{max_retries + 1}): {e}")
-                
-                # If this was the last attempt, break and return error decision
                 if attempt == max_retries:
                     break
         
