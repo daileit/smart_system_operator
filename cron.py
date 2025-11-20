@@ -314,6 +314,7 @@ class AIAnalyzer:
             if not server:
                 return
             
+            logger.info(f"Starting AI analysis for server {server['name']}")
             context = self._get_server_context(server_id)
             if not context['recent_metrics']:
                 return
