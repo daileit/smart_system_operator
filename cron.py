@@ -260,7 +260,7 @@ class AIAnalyzer:
             'server_stats': server_stats
         }
 
-        logger.info(f"Fetched context for server_id={server_id}: {context}")
+        logger.debug(f"Fetched context for server_id={server_id}: {context}")
         
         return context
     

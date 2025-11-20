@@ -60,6 +60,8 @@ def servers_page():
     def refresh_servers():
         updated_list = server_manager.get_all_servers(include_actions=True)
         servers_table.update_rows(rows=get_rows(updated_list), clear_selection=True)
+        redis_client.invalidate_action_cache()
+        redis_client.invalidate_server_cache()
     
     def test_connection(host, port, username, ssh_private_key, test_button=None):
         """Test SSH connection to server."""
