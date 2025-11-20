@@ -11,6 +11,7 @@ import paramiko
 import requests
 import time
 import json
+import re
 from typing import Optional, Dict, List, Any, Tuple
 from dataclasses import dataclass
 from datetime import datetime
@@ -250,8 +251,14 @@ class ActionManager:
         except Exception as e:
             self.logger.error(f"Error getting action by name {action_name}: {e}")
             return None
-    
-    # ===== Helper Methods =====
+     
+    @staticmethod
+    def _sanitize_output(text: Optional[str], text_type: Optional[str] = None) -> Optional[str]:
+        if not text:
+            return text            
+        text = re.sub(r'[ \t]+', ' ', text)
+        text = re.sub(r'\n\s*\n\s*\n+', '\n\n', text)
+        return text.strip()
     
     def _substitute_template(self, template_str: str, params: Optional[Dict[str, str]], 
                             server_info: Optional[Dict[str, Any]] = None) -> str:
@@ -350,6 +357,10 @@ class ActionManager:
             output = stdout.read().decode('utf-8', errors='replace')
             error = stderr.read().decode('utf-8', errors='replace')
             exit_code = stdout.channel.recv_exit_status()
+            
+            # Sanitize output - reduce multiple whitespaces
+            output = self._sanitize_output(output)
+            error = self._sanitize_output(error)
             
             execution_time = time.time() - start_time
             
@@ -582,12 +593,15 @@ class ActionManager:
             
             execution_time = time.time() - start_time
             
+            # Sanitize response text - reduce multiple whitespaces
+            response_text = self._sanitize_output(response.text)
+            
             # Check response
             if response.ok:
                 self.logger.info(f"HTTP {method} request to {url} succeeded with status {response.status_code}")
                 return ExecutionResult(
                     success=True,
-                    output=response.text,
+                    output=response_text,
                     execution_time=round(execution_time, 2),
                     status_code=response.status_code
                 )
@@ -595,7 +609,7 @@ class ActionManager:
                 self.logger.warning(f"HTTP {method} request to {url} failed with status {response.status_code}")
                 return ExecutionResult(
                     success=False,
-                    output=response.text,
+                    output=response_text,
                     error=f"HTTP {response.status_code}: {response.reason}",
                     execution_time=round(execution_time, 2),
                     status_code=response.status_code
