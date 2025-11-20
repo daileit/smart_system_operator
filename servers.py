@@ -105,7 +105,7 @@ class ServerManager:
             server = self.db.fetch_one(
                 """
                 SELECT s.id, s.name, s.ip_address, s.port, s.username, 
-                       s.description, s.created_by, s.created_at, s.updated_at
+                       s.description, s.created_by, s.created_at
                 FROM servers s
                 WHERE s.id = %s
                 """,

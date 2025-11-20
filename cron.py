@@ -305,7 +305,7 @@ class AIAnalyzer:
         """Analyze metrics for a single server."""
         try:
             # Get server info (using internal caching)
-            server = self.server_manager.get_server(server_id, include_actions=True)
+            server = self.server_manager.get_server(server_id)
             if not server:
                 return
             
@@ -339,8 +339,8 @@ class AIAnalyzer:
                 server_statistics=context['server_stats'],
                 current_metrics={
                     'latest': context['recent_metrics'][0] if context['recent_metrics'] else None,
-                    'recent_history': context['recent_metrics'][1:] if len(context['recent_metrics']) > 1 else [],
-                    'ai_history': context['historical_analysis']
+                    'recent_metrics': context['recent_metrics'][1:] if len(context['recent_metrics']) > 1 else [],
+                    'your_historical_analysis': context['historical_analysis']
                 }
             )
             

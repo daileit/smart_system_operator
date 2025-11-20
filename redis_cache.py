@@ -114,12 +114,15 @@ class RedisClient:
     def delete_pattern(self, pattern):
         """Delete all keys matching a pattern (e.g., 'smart_system:servers:*')."""
         try:
-            keys = self.client.keys(pattern)
-            if keys:
-                deleted = self.client.delete(*keys)
-                logger.info(f"Deleted {deleted} cache keys matching pattern: {pattern}")
-                return deleted
-            return 0
+            cursor = 0
+            deleted = 0
+            while True:
+                cursor, keys = self.client.scan(cursor, match=pattern, count=100)
+                if keys:
+                    deleted += self.client.delete(*keys)
+                if cursor == 0:
+                    break
+            return deleted
         except redis.RedisError as e:
             logger.warning(f"Error deleting keys matching pattern {pattern}: {e}")
             return 0

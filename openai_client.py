@@ -267,7 +267,7 @@ class OpenAIClient:
 
         ASSIGNED ACTION IDs: {json.dumps(assigned_action_ids)}
 
-        AVAILABLE ACTIONS: {json.dumps(available_actions, indent=2, default=str)}
+        OTHER AVAILABLE ACTIONS: {json.dumps(available_actions, indent=2, default=str)}
 
         COMMAND EXECUTION RESULTS: {json.dumps(execution_logs or [], indent=2, default=str)}
 
@@ -593,30 +593,6 @@ class OpenAIClient:
                 'reasoning': f"Error generating strategy: {str(e)}"
             }
     
-    def _build_context(self,
-                      server_info: Dict[str, Any],
-                      available_actions: List[Dict[str, Any]],
-                      execution_logs: Optional[List[Dict[str, Any]]],
-                      server_statistics: Optional[Dict[str, Any]],
-                      current_metrics: Optional[Dict[str, Any]]) -> str:
-        """Build context string for AI analysis."""
-        context_parts = [
-            f"Server: {server_info.get('name')} ({server_info.get('ip_address')}:{server_info.get('port')})"
-        ]
-        
-        if server_info.get('description'):
-            context_parts.append(f"Description: {server_info.get('description')}")
-        
-        if server_statistics:
-            context_parts.append(f"Total executions: {server_statistics.get('total_executions', 0)}")
-            context_parts.append(f"Success rate: {server_statistics.get('success_count', 0)}/{server_statistics.get('total_executions', 0)}")
-        
-        if execution_logs:
-            recent_failures = [log for log in execution_logs if log.get('status') == 'failed']
-            if recent_failures:
-                context_parts.append(f"Recent failures: {len(recent_failures)}")
-        
-        return " | ".join(context_parts)
     
     def chat_about_server(self,
                          server_info: Dict[str, Any],
