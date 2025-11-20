@@ -251,13 +251,137 @@ class ActionManager:
             self.logger.error(f"Error getting action by name {action_name}: {e}")
             return None
     
+    # ===== Helper Methods =====
+    
+    def _substitute_template(self, template_str: str, params: Optional[Dict[str, str]], 
+                            server_info: Optional[Dict[str, Any]] = None) -> str:
+        """
+        Substitute parameters in a template string.
+        
+        Args:
+            template_str: Template string with $variable placeholders
+            params: User-provided parameters
+            server_info: Server information (ip_address, name)
+            
+        Returns:
+            Substituted string
+        """
+        template = Template(template_str)
+        substitution_vars = params.copy() if params else {}
+        
+        if server_info:
+            substitution_vars['server_ip'] = server_info.get('ip_address', '')
+            substitution_vars['server_name'] = server_info.get('name', '')
+        
+        return template.safe_substitute(substitution_vars)
+    
+    # ===== SSH Connection Management =====
+    
+    def _create_ssh_client(self, host: str, port: int, username: str, 
+                          ssh_private_key: str, timeout: int = 30) -> paramiko.SSHClient:
+        """
+        Create and connect SSH client.
+        
+        Args:
+            host: Server IP address
+            port: SSH port
+            username: SSH username
+            ssh_private_key: SSH private key content (PEM format text)
+            timeout: Timeout in seconds
+            
+        Returns:
+            Connected SSH client
+            
+        Raises:
+            paramiko.AuthenticationException: If authentication fails
+            paramiko.SSHException: If SSH connection fails
+        """
+        from io import StringIO
+        
+        # Create SSH client
+        ssh_client = paramiko.SSHClient()
+        ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        
+        # Load private key from string
+        try:
+            key_file = StringIO(ssh_private_key)
+            private_key = paramiko.RSAKey.from_private_key(key_file)
+        except:
+            try:
+                key_file = StringIO(ssh_private_key)
+                private_key = paramiko.Ed25519Key.from_private_key(key_file)
+            except:
+                key_file = StringIO(ssh_private_key)
+                private_key = paramiko.ECDSAKey.from_private_key(key_file)
+        
+        # Connect
+        ssh_client.connect(
+            hostname=host,
+            port=port,
+            username=username,
+            pkey=private_key,
+            timeout=timeout,
+            banner_timeout=timeout
+        )
+        
+        return ssh_client
+    
+    def _execute_command_on_client(self, ssh_client: paramiko.SSHClient, 
+                                   command: str, timeout: int = 30) -> ExecutionResult:
+        """
+        Execute a command on an existing SSH client.
+        
+        Args:
+            ssh_client: Connected SSH client
+            command: Command to execute
+            timeout: Timeout in seconds
+            
+        Returns:
+            ExecutionResult with output or error
+        """
+        import time
+        start_time = time.time()
+        
+        try:
+            # Execute command
+            stdin, stdout, stderr = ssh_client.exec_command(command, timeout=timeout)
+            
+            # Get output
+            output = stdout.read().decode('utf-8', errors='replace')
+            error = stderr.read().decode('utf-8', errors='replace')
+            exit_code = stdout.channel.recv_exit_status()
+            
+            execution_time = time.time() - start_time
+            
+            if exit_code == 0:
+                return ExecutionResult(
+                    success=True,
+                    output=output,
+                    error=error if error else None,
+                    execution_time=round(execution_time, 2)
+                )
+            else:
+                return ExecutionResult(
+                    success=False,
+                    output=output,
+                    error=error or f"Command exited with code {exit_code}",
+                    execution_time=round(execution_time, 2)
+                )
+        except Exception as e:
+            execution_time = time.time() - start_time
+            return ExecutionResult(
+                success=False,
+                error=str(e),
+                execution_time=round(execution_time, 2)
+            )
+    
     # ===== SSH Command Execution =====
     
     def execute_ssh_command(self, host: str, port: int, username: str, 
                            ssh_private_key: str, command: str, 
                            timeout: int = 30) -> ExecutionResult:
         """
-        Execute a command via SSH using paramiko.
+        Execute a single command via SSH.
         
         Args:
             host: Server IP address
@@ -270,92 +394,141 @@ class ActionManager:
         Returns:
             ExecutionResult with output or error
         """
-        import time
-        from io import StringIO
-        start_time = time.time()
-        
         ssh_client = None
         try:
-            # Create SSH client
-            ssh_client = paramiko.SSHClient()
-            ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-            
-            # Load private key from string
-            try:
-                key_file = StringIO(ssh_private_key)
-                private_key = paramiko.RSAKey.from_private_key(key_file)
-            except:
-                try:
-                    key_file = StringIO(ssh_private_key)
-                    private_key = paramiko.Ed25519Key.from_private_key(key_file)
-                except:
-                    key_file = StringIO(ssh_private_key)
-                    private_key = paramiko.ECDSAKey.from_private_key(key_file)
-            
-            # Connect
-            ssh_client.connect(
-                hostname=host,
-                port=port,
-                username=username,
-                pkey=private_key,
-                timeout=timeout,
-                banner_timeout=timeout
-            )
-            
-            # Execute command
-            stdin, stdout, stderr = ssh_client.exec_command(command, timeout=timeout)
-            
-            # Get output
-            output = stdout.read().decode('utf-8', errors='replace')
-            error = stderr.read().decode('utf-8', errors='replace')
-            exit_code = stdout.channel.recv_exit_status()
-            
-            execution_time = time.time() - start_time
-            
-            if exit_code == 0:
-                self.logger.info(f"SSH command executed successfully on {host}:{port}")
-                return ExecutionResult(
-                    success=True,
-                    output=output,
-                    error=error if error else None,
-                    execution_time=execution_time
-                )
-            else:
-                self.logger.warning(f"SSH command failed on {host}:{port} with exit code {exit_code}")
-                return ExecutionResult(
-                    success=False,
-                    output=output,
-                    error=error or f"Command exited with code {exit_code}",
-                    execution_time=execution_time
-                )
-                
-        except paramiko.AuthenticationException as e:
-            execution_time = time.time() - start_time
-            self.logger.error(f"SSH authentication failed for {host}:{port}: {e}")
-            return ExecutionResult(
-                success=False,
-                error=f"Authentication failed: {str(e)}",
-                execution_time=execution_time
-            )
-        except paramiko.SSHException as e:
-            execution_time = time.time() - start_time
+            ssh_client = self._create_ssh_client(host, port, username, ssh_private_key, timeout)
+            result = self._execute_command_on_client(ssh_client, command, timeout)
+            self.logger.info(f"SSH command executed on {host}:{port}")
+            return result
+        except (paramiko.AuthenticationException, paramiko.SSHException, Exception) as e:
+            error_msg = f"Authentication failed: {e}" if isinstance(e, paramiko.AuthenticationException) else \
+                       f"SSH error: {e}" if isinstance(e, paramiko.SSHException) else str(e)
             self.logger.error(f"SSH error for {host}:{port}: {e}")
-            return ExecutionResult(
-                success=False,
-                error=f"SSH error: {str(e)}",
-                execution_time=execution_time
-            )
-        except Exception as e:
-            execution_time = time.time() - start_time
-            self.logger.error(f"Error executing SSH command on {host}:{port}: {e}")
-            return ExecutionResult(
-                success=False,
-                error=str(e),
-                execution_time=execution_time
-            )
+            return ExecutionResult(success=False, error=error_msg, execution_time=0.0)
         finally:
             if ssh_client:
                 ssh_client.close()
+    
+    def execute_multiple_actions(self, server_id: int, 
+                                 action_ids: List[int],
+                                 params: Optional[Dict[str, str]] = None) -> Dict[int, ExecutionResult]:
+        """
+        Execute multiple actions on a server, reusing SSH connection.
+        
+        Args:
+            server_id: Server ID
+            action_ids: List of action IDs to execute
+            params: Parameters for template substitution
+            
+        Returns:
+            Dictionary mapping action_id to ExecutionResult
+        """
+        results = {}
+        
+        if not action_ids:
+            return results
+        
+        try:
+            # Get server info
+            server_info = self.db.fetch_one(
+                "SELECT id, name, ip_address, ssh_port, ssh_username, ssh_private_key FROM servers WHERE id = %s",
+                (server_id,)
+            )
+            
+            if not server_info:
+                error_result = ExecutionResult(success=False, error=f"Server {server_id} not found")
+                return {action_id: error_result for action_id in action_ids}
+            
+            # Separate actions by type
+            command_actions = []
+            http_actions = []
+            
+            for action_id in action_ids:
+                action = self.get_action(action_id)
+                if not action:
+                    results[action_id] = ExecutionResult(success=False, error=f"Action {action_id} not found")
+                    continue
+                
+                if not action.get('is_active'):
+                    results[action_id] = ExecutionResult(success=False, error=f"Action {action_id} is not active")
+                    continue
+                
+                action_type = action.get('action_type')
+                if action_type in ('command_get', 'command_execute'):
+                    command_actions.append(action)
+                elif action_type == 'http':
+                    http_actions.append(action)
+            
+            # Execute HTTP actions
+            for action in http_actions:
+                try:
+                    results[action['id']] = self._execute_http_action(action, params, server_info, action.get('timeout_seconds', 10))
+                except Exception as e:
+                    results[action['id']] = ExecutionResult(success=False, error=str(e))
+            
+            # Execute command actions with SSH connection reuse
+            if command_actions:
+                results.update(self._execute_command_actions_batch(server_info, command_actions, params))
+            
+            return results
+            
+        except Exception as e:
+            self.logger.error(f"Error in execute_multiple_actions: {e}")
+            error_result = ExecutionResult(success=False, error=str(e))
+            return {action_id: results.get(action_id, error_result) for action_id in action_ids}
+    
+    def _execute_command_actions_batch(self, server_info: Dict[str, Any], 
+                                      actions: List[Dict[str, Any]], 
+                                      params: Optional[Dict[str, str]]) -> Dict[int, ExecutionResult]:
+        """Execute multiple command actions using a single SSH connection."""
+        results = {}
+        ssh_client = None
+        
+        try:
+            ssh_client = self._create_ssh_client(
+                host=server_info['ip_address'],
+                port=server_info['ssh_port'],
+                username=server_info['ssh_username'],
+                ssh_private_key=server_info['ssh_private_key'],
+                timeout=30
+            )
+            
+            self.logger.info(f"Reusing SSH connection for {len(actions)} actions on server {server_info['id']}")
+            
+            for action in actions:
+                try:
+                    command_template = action.get('command_template', '')
+                    if not command_template:
+                        results[action['id']] = ExecutionResult(success=False, error="Command template is empty")
+                        continue
+                    
+                    # Substitute parameters
+                    try:
+                        command = self._substitute_template(command_template, params, server_info)
+                    except Exception as e:
+                        results[action['id']] = ExecutionResult(success=False, error=f"Template substitution failed: {e}")
+                        continue
+                    
+                    # Execute command
+                    timeout = action.get('timeout_seconds', 30)
+                    results[action['id']] = self._execute_command_on_client(ssh_client, command, timeout)
+                    
+                except Exception as e:
+                    self.logger.error(f"Error executing action {action['id']}: {e}")
+                    results[action['id']] = ExecutionResult(success=False, error=str(e))
+        
+        except (paramiko.AuthenticationException, paramiko.SSHException, Exception) as e:
+            error_msg = f"Authentication failed: {e}" if isinstance(e, paramiko.AuthenticationException) else \
+                       f"SSH error: {e}" if isinstance(e, paramiko.SSHException) else str(e)
+            self.logger.error(f"SSH connection error for server {server_info['id']}: {e}")
+            for action in actions:
+                if action['id'] not in results:
+                    results[action['id']] = ExecutionResult(success=False, error=error_msg)
+        finally:
+            if ssh_client:
+                ssh_client.close()
+        
+        return results
     
     # ===== HTTP Request Execution =====
     
@@ -415,7 +588,7 @@ class ActionManager:
                 return ExecutionResult(
                     success=True,
                     output=response.text,
-                    execution_time=execution_time,
+                    execution_time=round(execution_time, 2),
                     status_code=response.status_code
                 )
             else:
@@ -424,7 +597,7 @@ class ActionManager:
                     success=False,
                     output=response.text,
                     error=f"HTTP {response.status_code}: {response.reason}",
-                    execution_time=execution_time,
+                    execution_time=round(execution_time, 2),
                     status_code=response.status_code
                 )
                 
@@ -434,7 +607,7 @@ class ActionManager:
             return ExecutionResult(
                 success=False,
                 error=f"Request timeout: {str(e)}",
-                execution_time=execution_time
+                execution_time=round(execution_time, 2)
             )
         except requests.exceptions.RequestException as e:
             execution_time = time.time() - start_time
@@ -442,7 +615,7 @@ class ActionManager:
             return ExecutionResult(
                 success=False,
                 error=f"Request error: {str(e)}",
-                execution_time=execution_time
+                execution_time=round(execution_time, 2)
             )
         except Exception as e:
             execution_time = time.time() - start_time
@@ -450,7 +623,7 @@ class ActionManager:
             return ExecutionResult(
                 success=False,
                 error=str(e),
-                execution_time=execution_time
+                execution_time=round(execution_time, 2)
             )
     
     # ===== Action Execution =====
@@ -458,158 +631,19 @@ class ActionManager:
     def execute_action(self, action_id: int, server_id: int,
                       params: Optional[Dict[str, str]] = None) -> ExecutionResult:
         """
-        Execute an action on a server.
+        Execute a single action on a server.
         
         Args:
             action_id: Action ID to execute
-            server_id: Server ID (SSH credentials fetched separately)
-            params: Parameters for template substitution (e.g., service_name, ip_address)
+            server_id: Server ID
+            params: Parameters for template substitution
             
         Returns:
             ExecutionResult with execution details
         """
-        try:
-            # Get action details
-            action = self.get_action(action_id)
-            if not action:
-                return ExecutionResult(
-                    success=False,
-                    error=f"Action {action_id} not found"
-                )
-            
-            if not action.get('is_active'):
-                return ExecutionResult(
-                    success=False,
-                    error=f"Action {action.get('action_name')} is not active"
-                )
-            
-            action_type = action.get('action_type')
-            timeout = action.get('timeout_seconds', 30)
-            
-            # Execute based on action type
-            if action_type in ('command_execute', 'command_get'):
-                # Fetch SSH credentials separately (secure)
-                from servers import ServerManager
-                server_manager = ServerManager(self.db, self.redis)
-                ssh_credentials = server_manager.get_server_ssh_credentials(server_id)
-                
-                if not ssh_credentials:
-                    return ExecutionResult(
-                        success=False,
-                        error=f"Server {server_id} not found or no SSH credentials"
-                    )
-                
-                return self._execute_command_action(action, ssh_credentials, params, timeout)
-            elif action_type == 'http':
-                return self._execute_http_action(action, params, timeout)
-            else:
-                return ExecutionResult(
-                    success=False,
-                    error=f"Unknown action type: {action_type}"
-                )
-                
-        except Exception as e:
-            self.logger.error(f"Error executing action {action_id}: {e}")
-            return ExecutionResult(
-                success=False,
-                error=str(e)
-            )
-    
-    def _execute_command_action(self, action: Dict[str, Any], 
-                               server_info: Dict[str, Any],
-                               params: Optional[Dict[str, str]],
-                               timeout: int) -> ExecutionResult:
-        """Execute a command action via SSH."""
-        try:
-            # Get command template
-            command_template = action.get('command_template')
-            if not command_template:
-                return ExecutionResult(
-                    success=False,
-                    error="No command template found for action"
-                )
-            
-            # Substitute parameters
-            if params:
-                try:
-                    template = Template(command_template)
-                    command = template.safe_substitute(params)
-                except Exception as e:
-                    return ExecutionResult(
-                        success=False,
-                        error=f"Error substituting parameters: {str(e)}"
-                    )
-            else:
-                command = command_template
-            
-            # Execute via SSH
-            result = self.execute_ssh_command(
-                host=server_info['ip_address'],
-                port=server_info.get('port', 22),
-                username=server_info['username'],
-                ssh_private_key=server_info['ssh_private_key'],
-                command=command,
-                timeout=timeout
-            )
-            
-            return result
-            
-        except Exception as e:
-            return ExecutionResult(
-                success=False,
-                error=f"Command execution error: {str(e)}"
-            )
-    
-    def _execute_http_action(self, action: Dict[str, Any],
-                            params: Optional[Dict[str, str]],
-                            timeout: int) -> ExecutionResult:
-        """Execute an HTTP action."""
-        try:
-            # Get HTTP config
-            method = action.get('http_method')
-            url = action.get('http_url')
-            headers = action.get('http_headers', {})
-            body = action.get('http_body')
-            parameters = action.get('parameters', {})
-            
-            if not method or not url:
-                return ExecutionResult(
-                    success=False,
-                    error="Missing HTTP method or URL"
-                )
-            
-            # Substitute parameters in URL and body
-            if params:
-                try:
-                    url_template = Template(url)
-                    url = url_template.safe_substitute(params)
-                    
-                    if body:
-                        body_template = Template(body)
-                        body = body_template.safe_substitute(params)
-                except Exception as e:
-                    return ExecutionResult(
-                        success=False,
-                        error=f"Error substituting parameters: {str(e)}"
-                    )
-            
-            # Execute HTTP request
-            result = self.execute_http_request(
-                method=method,
-                url=url,
-                headers=headers,
-                body=body,
-                parameters=parameters,
-                timeout=timeout
-            )
-            
-            return result
-            
-        except Exception as e:
-            return ExecutionResult(
-                success=False,
-                error=f"HTTP execution error: {str(e)}"
-            )
+        # Use execute_multiple_actions for consistency and code reuse
+        results = self.execute_multiple_actions(server_id, [action_id], params)
+        return results.get(action_id, ExecutionResult(success=False, error="No result returned"))
     
     def execute_action_by_name(self, action_name: str, server_id: int,
                               params: Optional[Dict[str, str]] = None) -> ExecutionResult:
@@ -618,25 +652,40 @@ class ActionManager:
         
         Args:
             action_name: Action name to execute
-            server_id: Server ID (SSH credentials fetched separately)
+            server_id: Server ID
             params: Parameters for template substitution
             
         Returns:
             ExecutionResult with execution details
         """
+        action = self.get_action_by_name(action_name)
+        if not action:
+            return ExecutionResult(success=False, error=f"Action '{action_name}' not found")
+        
+        return self.execute_action(action['id'], server_id, params)
+    
+    def _execute_http_action(self, action: Dict[str, Any],
+                            params: Optional[Dict[str, str]],
+                            server_info: Optional[Dict[str, Any]],
+                            timeout: int) -> ExecutionResult:
+        """Execute an HTTP action."""
         try:
-            action = self.get_action_by_name(action_name)
-            if not action:
-                return ExecutionResult(
-                    success=False,
-                    error=f"Action '{action_name}' not found"
-                )
+            method = action.get('http_method')
+            url = action.get('http_url')
+            headers = action.get('http_headers', {})
+            body = action.get('http_body')
+            parameters = action.get('parameters', {})
             
-            return self.execute_action(action['id'], server_id, params)
+            if not method or not url:
+                return ExecutionResult(success=False, error="Missing HTTP method or URL")
+            
+            # Substitute parameters in URL and body
+            url = self._substitute_template(url, params, server_info)
+            if body:
+                body = self._substitute_template(body, params, server_info)
+            
+            # Execute HTTP request
+            return self.execute_http_request(method, url, headers, body, parameters, timeout)
             
         except Exception as e:
-            self.logger.error(f"Error executing action by name {action_name}: {e}")
-            return ExecutionResult(
-                success=False,
-                error=str(e)
-            )
+            return ExecutionResult(success=False, error=f"HTTP execution error: {e}")

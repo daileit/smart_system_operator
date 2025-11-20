@@ -7,7 +7,7 @@ import asyncio
 import time
 import json
 from typing import Optional, Dict, List, Any
-from datetime import datetime
+from datetime import datetime, timedelta
 import jsonlog
 import config as env_config
 from database import DatabaseClient
@@ -21,6 +21,10 @@ logger = jsonlog.setup_logger("cron")
 def _get_metrics_key(server_id: int) -> str:
     """Get Redis key for server metrics queue."""
     return f"smart_system:server_metrics:{server_id}"
+
+def _get_now_time() -> str:
+    """Get current datetime in GMT+7 timezone without milliseconds."""
+    return (datetime.now() + timedelta(hours=7)).strftime("%Y-%m-%dT%H:%M:%S")
 
 
 class MetricsCrawler:
@@ -62,38 +66,39 @@ class MetricsCrawler:
             metrics = {
                 'server_id': server_id,
                 'server_name': server_name,
-                'timestamp': datetime.now().isoformat(),
+                'timestamp': _get_now_time(),
                 'data': {}
             }
             
-            # Collect basic metrics (CPU & RAM only)
+            # Execute all actions using connection reuse
+            action_ids = [a['id'] for a in allowed_actions]
+            results = self.action_manager.execute_multiple_actions(
+                server_id=server_id,
+                action_ids=action_ids,
+                params={}
+            )
+            
+            # Process results
             for action in allowed_actions:
                 action_name = action['action_name']
                 action_id = action['id']
+                result = results.get(action_id)
                 
-                try:
-                    logger.debug(f"Collecting {action_name} for {server_name}")
-                    result = self.action_manager.execute_action(
-                        action_id=action_id,
-                        server_id=server_id,
-                        params={}
-                    )
-                    
+                if result:
                     metrics['data'][action_name] = {
                         'output': result.output if result.success else None,
                         'error': result.error if not result.success else None,
                         'execution_time': result.execution_time,
-                        'collected_at': datetime.now().isoformat()
+                        'collected_at': _get_now_time()
                     }
                     
                     if not result.success:
                         self.logger.error(f"Failed: {action_name} on {server_name}")
-                
-                except Exception as e:
-                    self.logger.error(f"Error collecting {action_name} for {server_name}: {e}")
+                else:
+                    self.logger.error(f"No result for {action_name} on {server_name}")
                     metrics['data'][action_name] = {
-                        'error': str(e),
-                        'collected_at': datetime.now().isoformat()
+                        'error': 'No result returned',
+                        'collected_at': _get_now_time()
                     }
             
             return metrics if metrics['data'] else None
@@ -296,62 +301,6 @@ class AIAnalyzer:
         except Exception as e:
             self.logger.error(f"Error logging execution: {e}")
     
-    async def _execute_and_store_get_action(self, server: Dict[str, Any], 
-                                           action_rec: Dict[str, Any], 
-                                           analysis_id: int) -> Optional[Dict[str, Any]]:
-        """Execute a get action and return results for AI context."""
-        action_id = action_rec.get('action_id')
-        action_name = action_rec.get('action_name', 'unknown')
-        
-        try:
-            result = self.action_manager.execute_action(
-                action_id=action_id,
-                server_id=server['id'],
-                params=action_rec.get('parameters', {})
-            )
-            
-            # Log execution with reference to analysis
-            self._log_execution(server['id'], action_id, result, analysis_id)
-            
-            if result.success:
-                return {
-                    'action_name': action_name,
-                    'output': result.output,
-                    'execution_time': result.execution_time,
-                    'collected_at': datetime.now().isoformat(),
-                    'triggered_by': 'ai_recommendation'
-                }
-            return None
-                
-        except Exception as e:
-            self.logger.error(f"Error executing GET '{action_name}': {e}")
-            return None
-    
-    async def _process_action(self, server: Dict[str, Any], action_rec: Dict[str, Any], 
-                             action_type: str, analysis_id: int) -> Optional[Dict[str, Any]]:
-        """Process a single action (execute and log)."""
-        action_id = action_rec.get('action_id')
-        server_id = server['id']
-        
-        # Handle command_get actions - always execute
-        if action_type == 'command_get':
-            return await self._execute_and_store_get_action(server, action_rec, analysis_id)
-        
-        # Handle command_execute actions - check approval and automatic flag
-        elif action_type == 'command_execute':
-            # Check if low/medium risk and automatic
-            if self.server_manager.is_action_automatic(server_id, action_id):
-                result = self.action_manager.execute_action(
-                    action_id=action_id,
-                    server_id=server_id,
-                    params=action_rec.get('parameters', {})
-                )
-                
-                # Log execution with reference to analysis
-                self._log_execution(server_id, action_id, result, analysis_id)
-        
-        return None
-    
     async def _analyze_server(self, server_id: int):
         """Analyze metrics for a single server."""
         try:
@@ -407,24 +356,84 @@ class AIAnalyzer:
                 self.logger.error(f"Failed to log AI analysis for {server['name']}")
                 return
             
-            # Process each recommended action
-            additional_metrics = []
+            # Separate recommended actions by type
+            get_actions = []
+            execute_actions_to_run = []
+            
             for action_rec in decision.recommended_actions:
                 action_id = action_rec.get('action_id')
-                
                 action_info = next((a for a in available_actions_for_ai if a['id'] == action_id), None)
                 
-                if action_info:
-                    self.logger.info(f"Executing AI-recommended action_id={action_id} for {server['name']}")
-                    get_data = await self._process_action(server, action_rec, action_info.get('action_type'), analysis_id)
-                    if get_data:
-                        additional_metrics.append(get_data)
-                else:
-                    # AI recommended an action not assigned to this server
+                if not action_info:
                     self.logger.warning(
                         f"AI recommended action_id={action_id} for {server['name']}, "
                         f"but it's not assigned. Skipping execution."
                     )
+                    continue
+                
+                action_type = action_info.get('action_type')
+                
+                if action_type == 'command_get':
+                    get_actions.append((action_rec, action_info))
+                elif action_type == 'command_execute':
+                    # Check if low/medium risk and automatic
+                    if self.server_manager.is_action_automatic(server_id, action_id):
+                        execute_actions_to_run.append((action_rec, action_info))
+            
+            # Execute all command_get actions in batch (reusing SSH connection)
+            additional_metrics = []
+            if get_actions:
+                self.logger.info(f"Executing {len(get_actions)} GET actions in batch for {server['name']}")
+                get_action_ids = [rec[1]['id'] for rec in get_actions]
+                
+                results = self.action_manager.execute_multiple_actions(
+                    server_id=server_id,
+                    action_ids=get_action_ids,
+                    params={}
+                )
+                
+                # Process results and log
+                for action_rec, action_info in get_actions:
+                    action_id = action_info['id']
+                    action_name = action_info.get('action_name', 'unknown')
+                    result = results.get(action_id)
+                    
+                    if result:
+                        # Log execution with reference to analysis
+                        self._log_execution(server_id, action_id, result, analysis_id)
+                        
+                        if result.success:
+                            additional_metrics.append({
+                                'action_name': action_name,
+                                'output': result.output,
+                                'execution_time': result.execution_time,
+                                'collected_at': _get_now_time(),
+                                'triggered_by': 'ai_recommendation'
+                            })
+            
+            # Execute command_execute actions in batch (they may have side effects, but batch for performance)
+            if execute_actions_to_run:
+                self.logger.info(f"Executing {len(execute_actions_to_run)} EXECUTE actions in batch for {server['name']}")
+                execute_action_ids = [rec[1]['id'] for rec in execute_actions_to_run]
+                
+                # Build params dict for all actions
+                execute_params = {}
+                for action_rec, action_info in execute_actions_to_run:
+                    if action_rec.get('parameters'):
+                        execute_params.update(action_rec.get('parameters', {}))
+                
+                results = self.action_manager.execute_multiple_actions(
+                    server_id=server_id,
+                    action_ids=execute_action_ids,
+                    params=execute_params
+                )
+                
+                # Log all executions
+                for action_rec, action_info in execute_actions_to_run:
+                    action_id = action_info['id']
+                    result = results.get(action_id)
+                    if result:
+                        self._log_execution(server_id, action_id, result, analysis_id)
             
             # Add AI-requested metrics to Redis
             if additional_metrics:
@@ -434,7 +443,7 @@ class AIAnalyzer:
                 new_metric = {
                     'server_id': server_id,
                     'server_name': server['name'],
-                    'timestamp': datetime.now().isoformat(),
+                    'timestamp': _get_now_time(),
                     'data': {item['action_name']: item for item in additional_metrics},
                     'source': 'ai_requested'
                 }
