@@ -1,8 +1,10 @@
 import redis
 import json
-import os
 from datetime import datetime, date
 from decimal import Decimal
+from typing import Optional, Any, List
+from functools import wraps
+import time
 import jsonlog
 import config as env_config
 
@@ -11,10 +13,6 @@ logger = jsonlog.setup_logger("cache")
 redis_config = env_config.Config(group="REDIS")
 redisHost = redis_config.get("REDIS_HOST")
 redisPassword = redis_config.get("REDIS_PASSWORD")
-
-init_default_data = [
-    {'role': 'system', 'content': 'Initialize the system with default data'},
-]
 
 
 class DateTimeEncoder(json.JSONEncoder):
@@ -27,92 +25,327 @@ class DateTimeEncoder(json.JSONEncoder):
         return super().default(obj)
 
 
-class RedisClient:
-    def __init__(self, host=redisHost, port=6379, db=0):
-        # Initialize the Redis connection
-        self.client = redis.Redis(host=host, port=port, db=db, decode_responses=True)
-        self.init_default_data = init_default_data
-        try:
-            self.set_json("init_default_data", init_default_data)
-        except redis.RedisError:
+def retry_on_failure(max_retries: int = 3, delay: float = 0.1):
+    """Retry decorator for Redis operations with exponential backoff."""
+    def decorator(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            for attempt in range(max_retries):
+                try:
+                    return func(*args, **kwargs)
+                except redis.ConnectionError as e:
+                    if attempt == max_retries - 1:
+                        logger.error(f"Redis operation failed after {max_retries} attempts: {e}")
+                        raise
+                    time.sleep(delay * (2 ** attempt))  # Exponential backoff
+                    logger.warning(f"Redis connection failed, retrying ({attempt + 1}/{max_retries})...")
             return None
-    def delete_key(self, key):
+        return wrapper
+    return decorator
+
+
+class RedisClient:
+    """Redis client wrapper with JSON support and retry logic."""
+    
+    _pool = None
+    
+    @classmethod
+    def _get_pool(cls, host: str, port: int, db: int, password: Optional[str]):
+        """Get or create connection pool (singleton pattern)."""
+        if cls._pool is None:
+            cls._pool = redis.ConnectionPool(
+                host=host,
+                port=port,
+                db=db,
+                password=password,
+                decode_responses=True,
+                max_connections=50,
+                socket_keepalive=True,
+                socket_connect_timeout=5,
+                retry_on_timeout=True
+            )
+        return cls._pool
+    
+    def __init__(self, host: Optional[str] = None, port: int = 6379, 
+                 db: int = 0, password: Optional[str] = None):
+        """
+        Initialize Redis client with connection pooling.
+        
+        Args:
+            host: Redis host (defaults to config)
+            port: Redis port
+            db: Redis database number
+            password: Redis password (defaults to config)
+            
+        Raises:
+            redis.RedisError: If connection fails
+        """
+        host = host or redisHost
+        password = password or redisPassword
+        
+        pool = self._get_pool(host, port, db, password)
+        self.client = redis.Redis(connection_pool=pool)
+        
+        # Test connection
+        try:
+            self.client.ping()
+            logger.info(f"Redis client initialized: {host}:{port}, db={db}")
+        except redis.RedisError as e:
+            logger.error(f"Redis initialization failed: {e}")
+            raise
+    
+    def health_check(self) -> bool:
+        """Check if Redis connection is healthy."""
+        try:
+            return self.client.ping()
+        except redis.RedisError:
+            return False
+    
+    # ===== String Operations =====
+    
+    @retry_on_failure()
+    def set_string(self, key: str, value: str, ttl: Optional[int] = None) -> None:
+        """Set a string value in Redis."""
+        self.client.set(key, value, ex=ttl)
+    
+    @retry_on_failure()
+    def get_string(self, key: str) -> Optional[str]:
+        """Retrieve a string value from Redis."""
+        return self.client.get(key)
+    
+    # ===== JSON Operations =====
+    
+    @retry_on_failure()
+    def set_json(self, key: str, value: Any, ttl: Optional[int] = None) -> None:
+        """Serialize and store JSON object in Redis."""
+        json_value = json.dumps(value, cls=DateTimeEncoder)
+        self.client.set(key, json_value, ex=ttl)
+    
+    @retry_on_failure()
+    def get_json(self, key: str) -> Optional[Any]:
+        """Retrieve and deserialize JSON object from Redis."""
+        json_value = self.client.get(key)
+        if json_value:
+            logger.debug(f"Cache HIT: {key}")
+            return json.loads(json_value)
+        logger.debug(f"Cache MISS: {key}")
+        return None
+    
+    # ===== List Operations (Using Redis Native Lists) =====
+    
+    @retry_on_failure()
+    def lpush_json(self, key: str, value: Any, ttl: Optional[int] = None) -> int:
+        """
+        Push JSON value to the LEFT (head) of a Redis list.
+        
+        Args:
+            key: Redis key
+            value: Value to serialize and push
+            ttl: Optional TTL in seconds
+            
+        Returns:
+            Length of list after push
+        """
+        json_value = json.dumps(value, cls=DateTimeEncoder)
+        length = self.client.lpush(key, json_value)
+        if ttl:
+            self.client.expire(key, ttl)
+        return length
+    
+    @retry_on_failure()
+    def rpush_json(self, key: str, value: Any, ttl: Optional[int] = None) -> int:
+        """
+        Push JSON value to the RIGHT (tail) of a Redis list.
+        
+        Args:
+            key: Redis key
+            value: Value to serialize and push
+            ttl: Optional TTL in seconds
+            
+        Returns:
+            Length of list after push
+        """
+        json_value = json.dumps(value, cls=DateTimeEncoder)
+        length = self.client.rpush(key, json_value)
+        if ttl:
+            self.client.expire(key, ttl)
+        return length
+    
+    @retry_on_failure()
+    def lpush_json_with_limit(self, key: str, value: Any, limit: int, 
+                              ttl: Optional[int] = None) -> int:
+        """
+        Push JSON value to LEFT of list and trim to limit.
+        
+        Args:
+            key: Redis key
+            value: Value to serialize and push
+            limit: Maximum list length
+            ttl: Optional TTL in seconds
+            
+        Returns:
+            Length of list after push and trim
+        """
+        json_value = json.dumps(value, cls=DateTimeEncoder)
+        
+        # Use pipeline for atomic operation
+        pipe = self.client.pipeline()
+        pipe.lpush(key, json_value)
+        pipe.ltrim(key, 0, limit - 1)  # Keep only first 'limit' items
+        if ttl:
+            pipe.expire(key, ttl)
+        results = pipe.execute()
+        
+        length = results[0]  # Length after lpush
+        logger.debug(f"Pushed to list {key}, trimmed to {limit} items")
+        return min(length, limit)
+    
+    @retry_on_failure()
+    def rpush_json_with_limit(self, key: str, value: Any, limit: int, 
+                              ttl: Optional[int] = None) -> int:
+        """
+        Push JSON value to RIGHT of list and trim to limit.
+        
+        Args:
+            key: Redis key
+            value: Value to serialize and push
+            limit: Maximum list length
+            ttl: Optional TTL in seconds
+            
+        Returns:
+            Length of list after push and trim
+        """
+        json_value = json.dumps(value, cls=DateTimeEncoder)
+        
+        # Use pipeline for atomic operation
+        pipe = self.client.pipeline()
+        pipe.rpush(key, json_value)
+        pipe.ltrim(key, -limit, -1)  # Keep only last 'limit' items
+        if ttl:
+            pipe.expire(key, ttl)
+        results = pipe.execute()
+        
+        length = results[0]  # Length after rpush
+        logger.debug(f"Pushed to list {key}, trimmed to {limit} items")
+        return min(length, limit)
+    
+    @retry_on_failure()
+    def lrange_json(self, key: str, start: int = 0, end: int = -1) -> Optional[List[Any]]:
+        """
+        Get range of items from Redis list and deserialize.
+        
+        Args:
+            key: Redis key
+            start: Start index (0-based)
+            end: End index (-1 for all)
+            
+        Returns:
+            List of deserialized objects or None if key doesn't exist
+        """
+        json_values = self.client.lrange(key, start, end)
+        if not json_values:
+            return None
+        
+        logger.debug(f"Retrieved {len(json_values)} items from list {key}")
+        return [json.loads(v) for v in json_values]
+    
+    @retry_on_failure()
+    def llen(self, key: str) -> int:
+        """Get length of Redis list."""
+        return self.client.llen(key)
+    
+    # ===== Legacy Compatibility Methods =====
+    
+    def set_json_list(self, key: str, values: List[Any], ttl: Optional[int] = None) -> None:
+        """
+        Set entire list at once using Redis native list.
+        Replaces any existing list.
+        
+        Args:
+            key: Redis key
+            values: List of values to store
+            ttl: Optional TTL in seconds
+        """
+        # Delete existing list first
+        self.client.delete(key)
+        
+        if not values:
+            return
+        
+        # Serialize all values
+        json_values = [json.dumps(v, cls=DateTimeEncoder) for v in values]
+        
+        # Push all values at once using pipeline
+        pipe = self.client.pipeline()
+        pipe.rpush(key, *json_values)
+        if ttl:
+            pipe.expire(key, ttl)
+        pipe.execute()
+        
+        logger.debug(f"Set list {key} with {len(values)} items")
+    
+    def get_json_list(self, key: str) -> Optional[List[Any]]:
+        """
+        Get entire list at once using Redis native list.
+        
+        Args:
+            key: Redis key
+            
+        Returns:
+            List of deserialized objects or None if key doesn't exist
+        """
+        json_values = self.client.lrange(key, 0, -1)
+        if not json_values:
+            return None
+        
+        logger.info(f"Found cached list {key} with {len(json_values)} items")
+        return [json.loads(v) for v in json_values]
+    
+    def append_json_list_with_limit(self, key: str, value: Any, limit: int, 
+                                   ttl: Optional[int] = None, left_side: bool = True) -> None:
+        """
+        Append to list with limit (legacy compatibility).
+        Now uses Redis native lists internally.
+        
+        Args:
+            key: Redis key
+            value: Value to append
+            limit: Maximum list length
+            ttl: Optional TTL
+            position: 0 for prepend (default), -1 for append
+        """
+        if left_side:
+            self.lpush_json_with_limit(key, value, limit, ttl)
+        else:
+            self.rpush_json_with_limit(key, value, limit, ttl)
+    
+    # ===== Key Operations =====
+    
+    @retry_on_failure()
+    def exists(self, key: str) -> bool:
+        """Check if key exists in Redis."""
+        return self.client.exists(key) > 0
+    
+    @retry_on_failure()
+    def delete_key(self, key: str) -> bool:
+        """Delete a single key."""
         try:
             return self.client.delete(key) > 0
         except redis.RedisError as e:
             logger.warning(f"Error deleting key {key}: {e}")
             return False
-
-    def set_string(self, key, value, ttl=None):
-        # Set a string value in Redis
-        self.client.set(key, value)
-        if ttl:
-            self.client.expire(key, ttl)
-
-    def get_string(self, key):
-        # Retrieve a string value from Redis
-        return self.client.get(key)
-
-    def set_json(self, key, value, ttl=None):
-        # Serialize the JSON object and set it in Redis with datetime support
-        json_value = json.dumps(value, cls=DateTimeEncoder)
-        self.client.set(key, json_value)
-        if ttl:
-            self.client.expire(key, ttl)
-
-    def get_json(self, key):
-        # Retrieve and deserialize the JSON object from Redis
-        json_value = self.client.get(key)
-        return json.loads(json_value) if json_value else None
-
-    def set_json_list(self, key, values, ttl=None):
-        # Serialize the list of JSON objects and set it in Redis with datetime support
-        json_values = json.dumps(values, cls=DateTimeEncoder)
-        self.client.set(key, json_values)
-        if ttl:
-            self.client.expire(key, ttl)
-
-    def get_json_list(self, key):
-        # Retrieve and deserialize the list of JSON objects from Redis
-        json_values = self.client.get(key)
-        if json_values:
-            logger.info("Found cached %s"%key)
-        return json.loads(json_values) if json_values else None
-
-    def append_json_list_with_limit(self, key, value, limit, ttl=None, position=0):
-        try:
-            # Retrieve the current list from Redis
-            current_list = self.get_json_list(key)
-            if current_list is None:
-                current_list = []
-            else:
-                logger.info("Append to %s"%key)
-
-            # If the key exists and is a list, append the new value at the start
-            current_list.insert(position, value)
-            logger.debug("Append to the %s: %s"%(key,current_list))
-
-            # Trim the list to ensure the length does not exceed the limit
-            if len(current_list) > limit:
-                current_list = current_list[:limit]
-                logger.info("Trim the list to %s items"%(limit))
-
-            # Set the updated list back to Redis
-            self.client.set(key, json.dumps(current_list))
-
-            # Set the TTL if specified
-            if ttl:
-                self.client.expire(key, ttl)
-        except Exception as e:
-            logger.error(f"Error in append_json_list_with_limit: {str(e)}")
-            logger.warning(f"Error value: {str(value)}")
-
-    def exists(self, key):
-        # Check if the key exists in the Redis database
-        return self.client.exists(key) > 0
     
-    def delete_pattern(self, pattern):
-        """Delete all keys matching a pattern (e.g., 'smart_system:servers:*')."""
+    @retry_on_failure()
+    def delete_pattern(self, pattern: str) -> int:
+        """
+        Delete all keys matching a pattern using SCAN (production-safe).
+        
+        Args:
+            pattern: Pattern to match (e.g., 'smart_system:servers:*')
+            
+        Returns:
+            Number of keys deleted
+        """
         try:
             cursor = 0
             deleted = 0
@@ -122,17 +355,26 @@ class RedisClient:
                     deleted += self.client.delete(*keys)
                 if cursor == 0:
                     break
+            
+            if deleted > 0:
+                logger.info(f"Deleted {deleted} keys matching pattern: {pattern}")
             return deleted
         except redis.RedisError as e:
             logger.warning(f"Error deleting keys matching pattern {pattern}: {e}")
             return 0
     
-    def invalidate_server_cache(self, server_id, app_name="smart_system"):
-        """Invalidate all cache entries related to a specific server.
+    # ===== Cache Invalidation Helpers =====
+    
+    def invalidate_server_cache(self, server_id: int, app_name: str = "smart_system") -> int:
+        """
+        Invalidate all cache entries related to a specific server.
         
         Args:
             server_id: Server ID
-            app_name: Application name prefix (default: smart_system)
+            app_name: Application name prefix
+            
+        Returns:
+            Total number of keys deleted
         """
         patterns = [
             f"{app_name}:servers:server_actions:{server_id}:*",
@@ -151,11 +393,15 @@ class RedisClient:
             logger.info(f"Invalidated {total_deleted} cache entries for server {server_id}")
         return total_deleted
     
-    def invalidate_action_cache(self, app_name="smart_system"):
-        """Invalidate all action-related cache entries.
+    def invalidate_action_cache(self, app_name: str = "smart_system") -> int:
+        """
+        Invalidate all action-related cache entries.
         
         Args:
-            app_name: Application name prefix (default: smart_system)
+            app_name: Application name prefix
+            
+        Returns:
+            Number of keys deleted
         """
         pattern = f"{app_name}:actions:*"
         deleted = self.delete_pattern(pattern)
