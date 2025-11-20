@@ -306,14 +306,18 @@ CURRENT METRICS: {json.dumps(current_metrics or {}, indent=2, default=str)}"""
                 result = json.loads(response.choices[0].message.content)
                 
                 # Create AIDecision object
-                decision = AIDecision(
-                    recommended_actions=result.get('recommended_actions', []),
-                    reasoning=result.get('reasoning', ''),
-                    confidence=result.get('confidence', 0.0),
-                    risk_level=result.get('risk_level', 'medium'),
-                    requires_approval=result.get('requires_approval', True),
-                    model=selected_model
-                )
+                if isinstance(result, dict):
+                    decision = AIDecision(
+                        recommended_actions=result.get('recommended_actions', []),
+                        reasoning=result.get('reasoning', ''),
+                        confidence=result.get('confidence', 0.0),
+                        risk_level=result.get('risk_level', 'medium'),
+                        requires_approval=result.get('requires_approval', True),
+                        model=selected_model
+                    )
+                else:
+                    self.logger.error(f"Invalid response format from AI: {result}")
+                    raise ValueError("Invalid response format from AI")
                 
                 self.logger.info(f"AI ({selected_model}) analysis completed for {server_info.get('name')}: "
                                f"{len(decision.recommended_actions)} actions recommended.")
