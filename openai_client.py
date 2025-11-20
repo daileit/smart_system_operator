@@ -262,15 +262,15 @@ OUTPUT JSON:
             assigned_action_ids = [a['id'] for a in available_actions]
         
         # Create user message with assigned actions info
-        user_message = f"""SERVER: {json.dumps(server_info, indent=2, default=str)}
+        user_message = f"""SERVER: {json.dumps(server_info, separators=(',', ':'))}
 
-ASSIGNED ACTION IDs: {json.dumps(assigned_action_ids)}
+ASSIGNED ACTION IDs: {json.dumps(assigned_action_ids, separators=(',', ':'))}
 
-OTHER AVAILABLE ACTIONS: {json.dumps(available_actions, indent=2, default=str)}
+OTHER AVAILABLE ACTIONS: {json.dumps(available_actions, separators=(',', ':'), default=str)}
 
-COMMAND EXECUTION RESULTS: {json.dumps(execution_logs or [], indent=2, default=str)}
+COMMAND EXECUTION RESULTS: {json.dumps(execution_logs or [], separators=(',', ':'), default=str)}
 
-CURRENT METRICS: {json.dumps(current_metrics or {}, indent=2, default=str)}"""
+CURRENT METRICS: {json.dumps(current_metrics or {}, separators=(',', ':'))}"""
         
         # Retry logic: try up to 3 times (1 initial + 2 retries) with different models
         max_retries = 2
