@@ -287,7 +287,7 @@ CURRENT METRICS: {json.dumps(current_metrics or {}, separators=(',', ':'))}"""
                 if attempt > 0:
                     self.logger.warning(f"Retry attempt {attempt}/{max_retries} with model: {selected_model}")
                 
-                self.logger.info(f"Call AI with [system_prompt: {self.system_prompt}, user_message: {user_message}]")
+                self.logger.debug(f"Call AI with [system_prompt: {self.system_prompt}, user_message: {user_message}]")
                 response = self.client.chat.completions.create(
                     model=selected_model,
                     messages=[
@@ -362,10 +362,10 @@ CURRENT METRICS: {json.dumps(current_metrics or {}, separators=(',', ':'))}"""
         SERVER: {server_info.get('name')} ({server_info.get('ip_address')})
 
         AVAILABLE ACTIONS:
-        {json.dumps(available_actions, indent=2, default=str)}
+        {json.dumps(available_actions, separators=(',', ':'), default=str)}
 
         RECENT LOGS:
-        {json.dumps(execution_logs or [], indent=2, default=str)}
+        {json.dumps(execution_logs or [], separators=(',', ':'), default=str)}
 
         Recommend actions to address this specific issue. Be specific about parameters needed for each action."""
 
@@ -454,10 +454,10 @@ CURRENT METRICS: {json.dumps(current_metrics or {}, separators=(',', ':'))}"""
             DESCRIPTION: {action_info.get('description')}
             COMMAND: {action_info.get('command_template', 'N/A')}
 
-            PARAMETERS: {json.dumps(parameters, indent=2)}
+            PARAMETERS: {json.dumps(parameters, separators=(',', ':'))}
 
             RECENT EXECUTION HISTORY:
-            {json.dumps(execution_logs or [], indent=2, default=str)}
+            {json.dumps(execution_logs or [], separators=(',', ':'), default=str)}
 
             Assess if this action is safe to execute now. Return JSON with:
             {{
@@ -553,7 +553,7 @@ CURRENT METRICS: {json.dumps(current_metrics or {}, separators=(',', ':'))}"""
             DESCRIPTION: {server_info.get('description', 'N/A')}
 
             AVAILABLE MONITORING ACTIONS:
-            {json.dumps(monitoring_actions, indent=2, default=str)}
+            {json.dumps(monitoring_actions, separators=(',', ':'), default=str)}
 
             Recommend which monitoring actions to run and how frequently. Return JSON with:
             {{
@@ -618,7 +618,7 @@ CURRENT METRICS: {json.dumps(current_metrics or {}, separators=(',', ':'))}"""
             DESCRIPTION: {server_info.get('description', 'N/A')}
 
             RECENT LOGS:
-            {json.dumps(execution_logs or [], indent=2, default=str)}
+            {json.dumps(execution_logs or [], separators=(',', ':'), default=str)}
 
             USER QUESTION: {user_question}"""
             
