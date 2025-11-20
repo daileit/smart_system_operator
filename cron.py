@@ -325,12 +325,12 @@ class AIAnalyzer:
                 logger.warning(f"No recent metrics for server {server['name']}, skipping analysis")
                 return
             
-            # Get assigned actions (for execution permission check)            
-            assigned_actions = server.get('allowed_actions', [])
+            # Get assigned actions and remove it from server dict           
+            assigned_actions = server.pop('allowed_actions', [])
             if not assigned_actions:
                 logger.warning(f"No assigned actions for server {server['name']}")
             
-            # Get ALL available command_get actions (using internal caching)
+            # Get ALL available command_get actions
             all_get_actions = self.action_manager.get_all_actions(
                 action_type='command_get',
                 active_only=True
@@ -344,9 +344,9 @@ class AIAnalyzer:
             
             # Call OpenAI for analysis with enhanced action list
             decision = self.openai.analyze_server_metrics(
-                server_info=server.pop('allowed_actions', []),
+                server_info=server,
                 available_actions=available_actions_for_ai,
-                assigned_action_ids=[a['id'] for a in assigned_actions],  # Pass assigned IDs for validation
+                assigned_action_ids=[a['id'] for a in assigned_actions],
                 execution_logs=context['execution_logs'],
                 server_statistics=context['server_stats'],
                 current_metrics={
@@ -361,7 +361,6 @@ class AIAnalyzer:
                 f"confidence: {decision.confidence:.2f}, risk: {decision.risk_level}"
             )
             
-            # Log AI analysis (always, even if no actions)
             analysis_id = self._log_analysis(server_id, decision)
             
             if not analysis_id:
