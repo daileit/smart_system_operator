@@ -19,43 +19,6 @@ from string import Template
 
 logger = jsonlog.setup_logger("action")
 
-
-@dataclass
-class Action:
-    """Action data model."""
-    id: Optional[int] = None
-    action_name: str = ""
-    action_type: str = ""
-    description: str = ""
-    is_active: bool = True
-    created_at: Optional[datetime] = None
-    command_template: Optional[str] = None
-    timeout_seconds: Optional[int] = None
-    http_method: Optional[str] = None
-    http_url: Optional[str] = None
-    http_headers: Optional[Dict[str, str]] = None
-    http_body: Optional[str] = None
-    parameters: Optional[Dict[str, Any]] = None
-    
-    def to_dict(self) -> Dict[str, Any]:
-        """Convert Action to dictionary."""
-        return {
-            'id': self.id,
-            'action_name': self.action_name,
-            'action_type': self.action_type,
-            'description': self.description,
-            'is_active': self.is_active,
-            'created_at': self.created_at.isoformat() if self.created_at else None,
-            'command_template': self.command_template,
-            'timeout_seconds': self.timeout_seconds,
-            'http_method': self.http_method,
-            'http_url': self.http_url,
-            'http_headers': self.http_headers,
-            'http_body': self.http_body,
-            'parameters': self.parameters
-        }
-
-
 @dataclass
 class ExecutionResult:
     """Result of an action execution."""
@@ -142,16 +105,32 @@ class ActionManager:
             # Merge timeout fields and parse JSON
             for action in actions:
                 action['timeout_seconds'] = action.get('cmd_timeout') or action.get('http_timeout') or 30
-                if action.get('http_headers'):
-                    try:
-                        action['http_headers'] = json.loads(action['http_headers']) if isinstance(action['http_headers'], str) else action['http_headers']
-                    except:
-                        action['http_headers'] = {}
-                if action.get('parameters'):
-                    try:
-                        action['parameters'] = json.loads(action['parameters']) if isinstance(action['parameters'], str) else action['parameters']
-                    except:
-                        action['parameters'] = {}
+                
+                # Clean up fields based on action type
+                if action.get('action_type') == 'http':
+                    # Remove command fields
+                    action.pop('command_template', None)
+                    action.pop('cmd_timeout', None)
+                    
+                    # Parse JSON fields for HTTP
+                    if action.get('http_headers'):
+                        try:
+                            action['http_headers'] = json.loads(action['http_headers']) if isinstance(action['http_headers'], str) else action['http_headers']
+                        except:
+                            action['http_headers'] = {}
+                    if action.get('parameters'):
+                        try:
+                            action['parameters'] = json.loads(action['parameters']) if isinstance(action['parameters'], str) else action['parameters']
+                        except:
+                            action['parameters'] = {}
+                else:
+                    # Remove HTTP fields
+                    action.pop('http_method', None)
+                    action.pop('http_url', None)
+                    action.pop('http_headers', None)
+                    action.pop('http_body', None)
+                    action.pop('parameters', None)
+                    action.pop('http_timeout', None)
             
             # Cache the result
             if self.redis:
@@ -191,16 +170,32 @@ class ActionManager:
             
             if action:
                 action['timeout_seconds'] = action.get('cmd_timeout') or action.get('http_timeout') or 30
-                if action.get('http_headers'):
-                    try:
-                        action['http_headers'] = json.loads(action['http_headers']) if isinstance(action['http_headers'], str) else action['http_headers']
-                    except:
-                        action['http_headers'] = {}
-                if action.get('parameters'):
-                    try:
-                        action['parameters'] = json.loads(action['parameters']) if isinstance(action['parameters'], str) else action['parameters']
-                    except:
-                        action['parameters'] = {}
+                
+                # Clean up fields based on action type
+                if action.get('action_type') == 'http':
+                    # Remove command fields
+                    action.pop('command_template', None)
+                    action.pop('cmd_timeout', None)
+                    
+                    # Parse JSON fields for HTTP
+                    if action.get('http_headers'):
+                        try:
+                            action['http_headers'] = json.loads(action['http_headers']) if isinstance(action['http_headers'], str) else action['http_headers']
+                        except:
+                            action['http_headers'] = {}
+                    if action.get('parameters'):
+                        try:
+                            action['parameters'] = json.loads(action['parameters']) if isinstance(action['parameters'], str) else action['parameters']
+                        except:
+                            action['parameters'] = {}
+                else:
+                    # Remove HTTP fields
+                    action.pop('http_method', None)
+                    action.pop('http_url', None)
+                    action.pop('http_headers', None)
+                    action.pop('http_body', None)
+                    action.pop('parameters', None)
+                    action.pop('http_timeout', None)
             
             return action
             
@@ -235,16 +230,32 @@ class ActionManager:
             
             if action:
                 action['timeout_seconds'] = action.get('cmd_timeout') or action.get('http_timeout') or 30
-                if action.get('http_headers'):
-                    try:
-                        action['http_headers'] = json.loads(action['http_headers']) if isinstance(action['http_headers'], str) else action['http_headers']
-                    except:
-                        action['http_headers'] = {}
-                if action.get('parameters'):
-                    try:
-                        action['parameters'] = json.loads(action['parameters']) if isinstance(action['parameters'], str) else action['parameters']
-                    except:
-                        action['parameters'] = {}
+                
+                # Clean up fields based on action type
+                if action.get('action_type') == 'http':
+                    # Remove command fields
+                    action.pop('command_template', None)
+                    action.pop('cmd_timeout', None)
+                    
+                    # Parse JSON fields for HTTP
+                    if action.get('http_headers'):
+                        try:
+                            action['http_headers'] = json.loads(action['http_headers']) if isinstance(action['http_headers'], str) else action['http_headers']
+                        except:
+                            action['http_headers'] = {}
+                    if action.get('parameters'):
+                        try:
+                            action['parameters'] = json.loads(action['parameters']) if isinstance(action['parameters'], str) else action['parameters']
+                        except:
+                            action['parameters'] = {}
+                else:
+                    # Remove HTTP fields
+                    action.pop('http_method', None)
+                    action.pop('http_url', None)
+                    action.pop('http_headers', None)
+                    action.pop('http_body', None)
+                    action.pop('parameters', None)
+                    action.pop('http_timeout', None)
             
             return action
             
@@ -386,7 +397,6 @@ class ActionManager:
                 execution_time=round(execution_time, 2)
             )
     
-    # ===== SSH Command Execution =====
     
     def execute_ssh_command(self, host: str, port: int, username: str, 
                            ssh_private_key: str, command: str, 
