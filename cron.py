@@ -125,9 +125,8 @@ class MetricsCrawler:
                     self.redis.append_json_list_with_limit(
                         key=key,
                         value=metrics,
-                        limit=100,
-                        ttl=600,
-                        position=0
+                        limit=20,
+                        ttl=600
                     )
                     collected += 1
             
