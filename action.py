@@ -442,7 +442,7 @@ class ActionManager:
         try:
             # Get server info
             server_info = self.db.fetch_one(
-                "SELECT id, name, ip_address, ssh_port, ssh_username, ssh_private_key FROM servers WHERE id = %s",
+                "SELECT id, name, ip_address, port, username, ssh_private_key FROM servers WHERE id = %s",
                 (server_id,)
             )
             
@@ -498,8 +498,8 @@ class ActionManager:
         try:
             ssh_client = self._create_ssh_client(
                 host=server_info['ip_address'],
-                port=server_info['ssh_port'],
-                username=server_info['ssh_username'],
+                port=server_info['port'],
+                username=server_info['username'],
                 ssh_private_key=server_info['ssh_private_key'],
                 timeout=30
             )
