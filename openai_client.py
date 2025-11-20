@@ -327,7 +327,8 @@ CURRENT METRICS: {json.dumps(current_metrics or {}, indent=2, default=str)}"""
             except Exception as e:
                 last_error = e
                 last_failed_model = selected_model
-                self.logger.error(f"Error with model {selected_model} (attempt {attempt + 1}/{max_retries + 1}): {e}")                
+                self.logger.error(f"Error with model {selected_model} (attempt {attempt + 1}/{max_retries + 1}): {e}")
+                self.logger.error(f"Return from model: {result if result else 'N/A'}")                
                 if attempt == max_retries:
                     break
 
