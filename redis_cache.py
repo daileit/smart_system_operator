@@ -254,73 +254,52 @@ class RedisClient:
         """Get length of Redis list."""
         return self.client.llen(key)
     
-    # ===== Legacy Compatibility Methods =====
-    
-    def set_json_list(self, key: str, values: List[Any], ttl: Optional[int] = None, left_side: Optional[bool] = True) -> None:
+    @retry_on_failure()
+    def get_list_items(self, key: str, count: int = 1, pop: bool = False, 
+                       direction: str = 'left') -> Optional[List[Any]]:
         """
-        Set entire list at once using Redis native list.
-        Replaces any existing list.
+        Get items from Redis list with flexible direction and pop options.
         
         Args:
             key: Redis key
-            values: List of values to store
-            ttl: Optional TTL in seconds
-        """
-        # Delete existing list first
-        self.client.delete(key)
-        
-        if not values:
-            return
-        
-        # Serialize all values
-        json_values = [json.dumps(v, cls=DateTimeEncoder) for v in values]
-        
-        # Push all values at once using pipeline
-        pipe = self.client.pipeline()
-        if left_side:
-            pipe.lpush(key, *json_values)
-        else:
-            pipe.rpush(key, *json_values)
-        if ttl:
-            pipe.expire(key, ttl)
-        pipe.execute()
-        
-        logger.debug(f"Set list {key} with {len(values)} items")
-    
-    def get_json_list(self, key: str) -> Optional[List[Any]]:
-        """
-        Get entire list at once using Redis native list.
-        
-        Args:
-            key: Redis key
+            count: Number of items to get
+            pop: If True, remove items from list. If False, just read
+            direction: 'left' for head/start, 'right' for tail/end
             
         Returns:
             List of deserialized objects or None if key doesn't exist
         """
-        json_values = self.client.lrange(key, 0, -1)
-        if not json_values:
+        direction = direction.lower()
+        
+        if pop:
+            # Use LPOP or RPOP to remove and return items
+            items = []
+            pop_command = self.client.lpop if direction == 'left' else self.client.rpop
+            
+            for _ in range(count):
+                json_value = pop_command(key)
+                if json_value is None:
+                    break
+                items.append(json.loads(json_value))
+            
+            if items:
+                logger.debug(f"Popped {len(items)} items from {direction} of {key}")
+                return items
             return None
-        
-        logger.info(f"Found cached list {key} with {len(json_values)} items")
-        return [json.loads(v) for v in json_values]
-    
-    def append_json_list_with_limit(self, key: str, value: Any, limit: int, 
-                                   ttl: Optional[int] = None, left_side: Optional[bool] = True) -> None:
-        """
-        Append to list with limit (legacy compatibility).
-        Now uses Redis native lists internally.
-        
-        Args:
-            key: Redis key
-            value: Value to append
-            limit: Maximum list length
-            ttl: Optional TTL
-            position: 0 for prepend (default), -1 for append
-        """
-        if left_side:
-            self.lpush_json_with_limit(key, value, limit, ttl)
         else:
-            self.rpush_json_with_limit(key, value, limit, ttl)
+            # Use LRANGE to just read items
+            if direction == 'left':
+                # Get from head: indices 0 to count-1
+                json_values = self.client.lrange(key, 0, count - 1)
+            else:
+                # Get from tail: indices -count to -1
+                json_values = self.client.lrange(key, -count, -1)
+            
+            if not json_values:
+                return None
+            
+            logger.debug(f"Retrieved {len(json_values)} items from {direction} of {key}")
+            return [json.loads(v) for v in json_values]
     
     # ===== Key Operations =====
     

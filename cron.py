@@ -122,7 +122,8 @@ class MetricsCrawler:
                 
                 if metrics and metrics['data']:
                     key = _get_metrics_key(server['id'])
-                    self.redis.append_json_list_with_limit(
+                    # Use new native list operations - push to left (head) with limit
+                    self.redis.lpush_json_with_limit(
                         key=key,
                         value=metrics,
                         limit=20,
@@ -212,10 +213,15 @@ class AIAnalyzer:
     
     def _get_server_context(self, server_id: int) -> Dict[str, Any]:
         """Get all context data for a server (metrics, logs, stats)."""
-        # Get metrics from Redis
+        # Get metrics from Redis using new native list operations
         key = _get_metrics_key(server_id)
-        metrics_list = self.redis.get_json_list(key)
-        recent_metrics = metrics_list[:self.max_metrics_per_analysis] if metrics_list else []
+        # Get first N items from the list (most recent, since we lpush)
+        recent_metrics = self.redis.get_list_items(
+            key=key,
+            count=self.max_metrics_per_analysis,
+            pop=False,
+            direction='left'
+        ) or []
         
         # Get historical analysis
         historical_analysis = self._get_historical_analysis(server_id)
@@ -437,7 +443,6 @@ class AIAnalyzer:
             # Add AI-requested metrics to Redis
             if additional_metrics:
                 key = _get_metrics_key(server_id)
-                current_metrics = self.redis.get_json_list(key) or []
                 
                 new_metric = {
                     'server_id': server_id,
@@ -447,20 +452,23 @@ class AIAnalyzer:
                     'source': 'ai_requested'
                 }
                 
-                current_metrics.insert(0, new_metric)
-                if len(current_metrics) > 100:
-                    current_metrics = current_metrics[:100]
-                
-                self.redis.set_json_list(key, current_metrics, ttl=600)
+                # Push to head and keep max 100 items
+                self.redis.lpush_json_with_limit(
+                    key=key,
+                    value=new_metric,
+                    limit=100,
+                    ttl=600
+                )
             
-            # Remove consumed metrics
+            # Remove consumed metrics by popping them from the head
             key = _get_metrics_key(server_id)
-            remaining = (self.redis.get_json_list(key) or [])[self.max_metrics_per_analysis:]
-            
-            if remaining:
-                self.redis.set_json_list(key, remaining, ttl=600)
-            else:
-                self.redis.delete_key(key)
+            # Pop the items we just analyzed (from left/head)
+            self.redis.get_list_items(
+                key=key,
+                count=self.max_metrics_per_analysis,
+                pop=True,
+                direction='left'
+            )
             
         except Exception as e:
             self.logger.error(f"Error analyzing server {server_id}: {e}")

@@ -52,7 +52,8 @@ def dashboard_page():
             return None
         
         key = f"smart_system:server_metrics:{server_id}"
-        metrics_list = redis_client.get_json_list(key)
+        # Get first item from list (most recent, since we lpush)
+        metrics_list = redis_client.get_list_items(key, count=1, pop=False, direction='left')
         
         if metrics_list and len(metrics_list) > 0:
             return metrics_list[0]  # Most recent
