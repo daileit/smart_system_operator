@@ -252,6 +252,12 @@ class AIAnalyzer:
             """,
             (server_id,)
         )
+
+        logger.info(f"Fetched context for server_id={server_id}: "
+                    f"metrics={len(recent_metrics)}, "
+                    f"historical_analysis={len(historical_analysis)}, "
+                    f"execution_logs={len(execution_logs) if execution_logs else 0}, "
+                    f"server_stats={server_stats}")
         
         return {
             'recent_metrics': recent_metrics,
