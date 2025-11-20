@@ -242,7 +242,6 @@ OUTPUT JSON:
                                available_actions: List[Dict[str, Any]],
                                assigned_action_ids: Optional[List[int]] = None,
                                execution_logs: Optional[List[Dict[str, Any]]] = None,
-                               server_statistics: Optional[Dict[str, Any]] = None,
                                current_metrics: Optional[Dict[str, Any]] = None) -> AIDecision:
         """
         Analyze server metrics and recommend actions.
@@ -270,8 +269,6 @@ ASSIGNED ACTION IDs: {json.dumps(assigned_action_ids)}
 OTHER AVAILABLE ACTIONS: {json.dumps(available_actions, indent=2, default=str)}
 
 COMMAND EXECUTION RESULTS: {json.dumps(execution_logs or [], indent=2, default=str)}
-
-STATISTICS: {json.dumps(server_statistics or {}, indent=2, default=str)}
 
 CURRENT METRICS: {json.dumps(current_metrics or {}, indent=2, default=str)}"""
         

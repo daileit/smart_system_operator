@@ -238,26 +238,12 @@ class AIAnalyzer:
             """,
             (server_id,)
         )
-        
-        # Get server statistics
-        server_stats = self.db.fetch_one(
-            """
-            SELECT 
-                COUNT(*) as total_executions,
-                SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) as successful_executions,
-                SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) as failed_executions,
-                AVG(execution_time) as avg_execution_time
-            FROM execution_logs
-            WHERE server_id = %s
-            """,
-            (server_id,)
-        )
+
 
         context = {
             'recent_metrics': recent_metrics,
             'historical_analysis': historical_analysis,
-            'execution_logs': execution_logs,
-            'server_stats': server_stats
+            'execution_logs': execution_logs
         }
 
         logger.debug(f"Fetched context for server_id={server_id}: {context}")
@@ -348,7 +334,6 @@ class AIAnalyzer:
                 available_actions=available_actions_for_ai,
                 assigned_action_ids=[a['id'] for a in assigned_actions],
                 execution_logs=context['execution_logs'],
-                server_statistics=context['server_stats'],
                 current_metrics={
                     'latest': context['recent_metrics'][0] if context['recent_metrics'] else None,
                     'recent_metrics': context['recent_metrics'][1:] if len(context['recent_metrics']) > 1 else [],
