@@ -253,18 +253,16 @@ class AIAnalyzer:
             (server_id,)
         )
 
-        logger.info(f"Fetched context for server_id={server_id}: "
-                    f"metrics={len(recent_metrics)}, "
-                    f"historical_analysis={len(historical_analysis)}, "
-                    f"execution_logs={len(execution_logs) if execution_logs else 0}, "
-                    f"server_stats={server_stats}")
-        
-        return {
+        context = {
             'recent_metrics': recent_metrics,
             'historical_analysis': historical_analysis,
             'execution_logs': execution_logs,
             'server_stats': server_stats
         }
+
+        logger.info(f"Fetched context for server_id={server_id}: {context}")
+        
+        return context
     
     def _log_analysis(self, server_id: int, decision) -> Optional[int]:
         """Log AI analysis to database and return analysis_id."""
@@ -318,17 +316,19 @@ class AIAnalyzer:
             # Get server info (using internal caching)
             server = self.server_manager.get_server(server_id)
             if not server:
+                logger.warning(f"Server ID {server_id} not found, skipping analysis")
                 return
             
             logger.info(f"Starting AI analysis for server {server['name']}")
             context = self._get_server_context(server_id)
             if not context['recent_metrics']:
+                logger.warning(f"No recent metrics for server {server['name']}, skipping analysis")
                 return
             
             # Get assigned actions (for execution permission check)
             assigned_actions = server.get('allowed_actions', [])
             if not assigned_actions:
-                return
+                logger.warning(f"No assigned actions for server {server['name']}")
             
             # Get ALL available command_get actions (using internal caching)
             all_get_actions = self.action_manager.get_all_actions(

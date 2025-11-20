@@ -287,9 +287,7 @@ class RedisClient:
                 return items
             return None
         else:
-            # Use LRANGE to just read items
             if direction == 'left':
-                # Get from head: indices 0 to count-1
                 json_values = self.client.lrange(key, 0, count - 1)
             else:
                 # Get from tail: indices -count to -1
