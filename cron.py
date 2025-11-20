@@ -267,7 +267,7 @@ class AIAnalyzer:
     def _log_analysis(self, server_id: int, decision) -> Optional[int]:
         """Log AI analysis to database and return analysis_id."""
         try:
-            affected_rows, analysis_id = self.db.execute_update(
+            _, analysis_id = self.db.execute_update(
                 """
                 INSERT INTO ai_analysis 
                 (server_id, reasoning, confidence, risk_level, requires_approval, recommended_actions, model)
@@ -314,7 +314,7 @@ class AIAnalyzer:
         """Analyze metrics for a single server."""
         try:
             # Get server info (using internal caching)
-            server = self.server_manager.get_server(server_id)
+            server = self.server_manager.get_server(server_id, include_actions=True)
             if not server:
                 logger.warning(f"Server ID {server_id} not found, skipping analysis")
                 return
@@ -325,7 +325,7 @@ class AIAnalyzer:
                 logger.warning(f"No recent metrics for server {server['name']}, skipping analysis")
                 return
             
-            # Get assigned actions (for execution permission check)
+            # Get assigned actions (for execution permission check)            
             assigned_actions = server.get('allowed_actions', [])
             if not assigned_actions:
                 logger.warning(f"No assigned actions for server {server['name']}")
@@ -344,7 +344,7 @@ class AIAnalyzer:
             
             # Call OpenAI for analysis with enhanced action list
             decision = self.openai.analyze_server_metrics(
-                server_info=server,
+                server_info=server.pop('allowed_actions', []),
                 available_actions=available_actions_for_ai,
                 assigned_action_ids=[a['id'] for a in assigned_actions],  # Pass assigned IDs for validation
                 execution_logs=context['execution_logs'],
