@@ -290,7 +290,7 @@ class OpenAIClient:
                 if attempt > 0:
                     self.logger.warning(f"Retry attempt {attempt}/{max_retries} with model: {selected_model}")
                 
-                # Call OpenAI API with selected model
+                self.logger.info(f"Call AI with [system_prompt: {self.system_prompt}, user_message: {user_message}]")
                 response = self.client.chat.completions.create(
                     model=selected_model,
                     messages=[
