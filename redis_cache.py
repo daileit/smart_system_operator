@@ -256,7 +256,7 @@ class RedisClient:
     
     # ===== Legacy Compatibility Methods =====
     
-    def set_json_list(self, key: str, values: List[Any], ttl: Optional[int] = None) -> None:
+    def set_json_list(self, key: str, values: List[Any], ttl: Optional[int] = None, left_side: Optional[bool] = True) -> None:
         """
         Set entire list at once using Redis native list.
         Replaces any existing list.
@@ -277,7 +277,10 @@ class RedisClient:
         
         # Push all values at once using pipeline
         pipe = self.client.pipeline()
-        pipe.rpush(key, *json_values)
+        if left_side:
+            pipe.lpush(key, *json_values)
+        else:
+            pipe.rpush(key, *json_values)
         if ttl:
             pipe.expire(key, ttl)
         pipe.execute()
@@ -302,7 +305,7 @@ class RedisClient:
         return [json.loads(v) for v in json_values]
     
     def append_json_list_with_limit(self, key: str, value: Any, limit: int, 
-                                   ttl: Optional[int] = None, left_side: bool = True) -> None:
+                                   ttl: Optional[int] = None, left_side: Optional[bool] = True) -> None:
         """
         Append to list with limit (legacy compatibility).
         Now uses Redis native lists internally.
