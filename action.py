@@ -229,7 +229,7 @@ class ActionManager:
             )
             
             if action:
-                action['timeout_seconds'] = action.get('cmd_timeout') or action.get('http_timeout') or 30
+                action['timeout_seconds'] = action.get('cmd_timeout') or action.get('http_timeout') or 10
                 
                 # Clean up fields based on action type
                 if action.get('action_type') == 'http':
@@ -296,7 +296,7 @@ class ActionManager:
     # ===== SSH Connection Management =====
     
     def _create_ssh_client(self, host: str, port: int, username: str, 
-                          ssh_private_key: str, timeout: int = 30) -> paramiko.SSHClient:
+                          ssh_private_key: str, timeout: int = 10) -> paramiko.SSHClient:
         """
         Create and connect SSH client.
         
@@ -345,7 +345,7 @@ class ActionManager:
         return ssh_client
     
     def _execute_command_on_client(self, ssh_client: paramiko.SSHClient, 
-                                   command: str, timeout: int = 30) -> ExecutionResult:
+                                   command: str, timeout: int = 10) -> ExecutionResult:
         """
         Execute a command on an existing SSH client.
         
