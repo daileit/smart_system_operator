@@ -461,7 +461,7 @@ def dashboard_page():
                                             elif exec_result and len(exec_result) < 2:
                                                 ui.label(exec_status).classes('text-caption font-mono whitespace-pre-wrap bg-white p-2 rounded')
                                             else:
-                                                ui.label(exec_result[:200] or 'N/a').classes('text-caption font-mono whitespace-pre-wrap bg-white p-2 rounded')
+                                                ui.label(exec_result[:200] if exec_result else 'N/a').classes('text-caption font-mono whitespace-pre-wrap bg-white p-2 rounded')
                                             
                                             exec_time = execution.get('execution_time')
                                             if exec_time:
