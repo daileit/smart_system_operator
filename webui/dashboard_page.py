@@ -455,13 +455,14 @@ def dashboard_page():
                                             
                                             # Show execution result/output
                                             exec_result = execution.get('execution_result', 'No output')
+                                            
                                             if exec_result and len(exec_result) > 200:
                                                 with ui.expansion('📄 Output', icon='description').classes('w-full bg-white rounded'):
                                                     ui.label(exec_result).classes('text-caption font-mono whitespace-pre-wrap')
                                             elif exec_result and len(exec_result) < 2:
                                                 ui.label(exec_status).classes('text-caption font-mono whitespace-pre-wrap bg-white p-2 rounded')
                                             else:
-                                                ui.label(exec_result[:200] if exec_result else 'N/a').classes('text-caption font-mono whitespace-pre-wrap bg-white p-2 rounded')
+                                                ui.label(exec_status).classes('text-caption font-mono whitespace-pre-wrap bg-white p-2 rounded')
                                             
                                             exec_time = execution.get('execution_time')
                                             if exec_time:
