@@ -458,7 +458,7 @@ def dashboard_page():
                                             if exec_result and len(exec_result) > 200:
                                                 with ui.expansion('📄 Output', icon='description').classes('w-full bg-white rounded'):
                                                     ui.label(exec_result).classes('text-caption font-mono whitespace-pre-wrap')
-                                            elif len(exec_result) < 2:
+                                            elif exec_result and len(exec_result) < 2:
                                                 ui.label(exec_status).classes('text-caption font-mono whitespace-pre-wrap bg-white p-2 rounded')
                                             else:
                                                 ui.label(exec_result[:200]).classes('text-caption font-mono whitespace-pre-wrap bg-white p-2 rounded')
