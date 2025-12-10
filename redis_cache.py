@@ -317,15 +317,6 @@ class RedisClient:
     
     @retry_on_failure()
     def delete_pattern(self, pattern: str) -> int:
-        """
-        Delete all keys matching a pattern using SCAN (production-safe).
-        
-        Args:
-            pattern: Pattern to match (e.g., 'smart_system:servers:*')
-            
-        Returns:
-            Number of keys deleted
-        """
         try:
             cursor = 0
             deleted = 0
@@ -346,16 +337,6 @@ class RedisClient:
     # ===== Cache Invalidation Helpers =====
     
     def invalidate_server_cache(self, server_id: int, app_name: str = "smart_system") -> int:
-        """
-        Invalidate all cache entries related to a specific server.
-        
-        Args:
-            server_id: Server ID
-            app_name: Application name prefix
-            
-        Returns:
-            Total number of keys deleted
-        """
         patterns = [
             f"{app_name}:servers:server_actions:{server_id}:*",
             f"{app_name}:servers:server_info:{server_id}",
@@ -374,15 +355,6 @@ class RedisClient:
         return total_deleted
     
     def invalidate_action_cache(self, app_name: str = "smart_system") -> int:
-        """
-        Invalidate all action-related cache entries.
-        
-        Args:
-            app_name: Application name prefix
-            
-        Returns:
-            Number of keys deleted
-        """
         pattern = f"{app_name}:actions:*"
         deleted = self.delete_pattern(pattern)
         if deleted > 0:
